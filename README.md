@@ -1,11 +1,11 @@
-## Usernode dApp Starter
+## Usernode dapp Starter
 
-This is a minimal, clone-and-go starter dApp that works in **two modes**:
+This is a minimal, clone-and-go starter dapp that works in **two modes**:
 
 - **Local dev mode**: you open the app in your normal browser (served from `localhost:8000`).
-- **dApp mode**: the same `index.html` is loaded inside the **Usernode Flutter app** in the dApps WebView.
+- **dapp mode**: the same `index.html` is loaded inside the **Usernode Flutter app** in the dapps WebView.
 
-The goal is to keep the dApp code identical across both modes, by exposing a small JS API surface via
+The goal is to keep the dapp code identical across both modes, by exposing a small JS API surface via
 `usernode-bridge.js`.
 
 ---
@@ -80,7 +80,7 @@ If you don’t set that, the bridge generates a random value once and stores it 
 
 - `localStorage["usernode:mockPubkey"]`
 
-#### dApp mode (loaded inside the Flutter app WebView)
+#### dapp mode (loaded inside the Flutter app WebView)
 
 `usernode-bridge.js` will detect the native environment by checking for the WebView channel:
 
@@ -104,5 +104,5 @@ use:
 
 - **`http://10.0.2.2:8000`**
 
-The Flutter app’s dApps screen already maps `localhost` → `10.0.2.2` when needed.
+The Flutter app’s dapps screen already maps `localhost` → `10.0.2.2` when needed.
 
