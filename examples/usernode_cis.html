@@ -1,0 +1,1704 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Collective Intelligence Service</title>
+    <!-- Provides `getNodeAddress()`, `sendTransaction()`, and `getTransactions()` in both
+         native (Flutter WebView) and local-dev (browser) modes. -->
+    <script src="/usernode-bridge.js"></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b0f16;
+        --fg: #e7edf7;
+        --muted: #a8b3c7;
+        --card: #141b26;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #6ea8fe;
+        --danger: #ff6b6b;
+        --ok: #5dd39e;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f7f8fb;
+          --fg: #0b1220;
+          --muted: #4b5568;
+          --card: #ffffff;
+          --border: rgba(15, 23, 42, 0.12);
+          --accent: #2563eb;
+          --danger: #c81e1e;
+          --ok: #0f766e;
+        }
+      }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: var(--bg);
+        color: var(--fg);
+        height: 100vh;
+        height: 100dvh;
+      }
+
+      main {
+        height: 100vh;
+        height: 100dvh;
+        display: flex;
+        justify-content: flex-start;
+        align-items: stretch;
+        padding: 16px;
+        box-sizing: border-box;
+      }
+
+      .shell {
+        width: 100%;
+        max-width: 900px;
+        margin: 0 auto;
+        display: block;
+      }
+
+      .appCard {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .header {
+        flex: 0 0 auto;
+        padding: 16px;
+        border-bottom: 1px solid var(--border);
+        position: relative;
+        z-index: 2;
+        background: var(--card);
+      }
+
+      .content {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        touch-action: pan-y;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 14px;
+        will-change: transform;
+        position: relative;
+        z-index: 1;
+      }
+      .archivedDock {
+        margin-top: auto;
+      }
+
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+      }
+
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+        letter-spacing: 0.2px;
+      }
+      p {
+        margin: 8px 0;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 0.95em;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .pillButton {
+        background: transparent;
+        cursor: pointer;
+      }
+      .pillButton:hover {
+        border-color: var(--accent);
+      }
+      .pillButton[disabled] {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .btn {
+        appearance: none;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: transparent;
+        color: var(--fg);
+        cursor: pointer;
+        text-align: left;
+      }
+      .btn:hover {
+        border-color: var(--accent);
+      }
+      .btn[disabled] {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .btn.primary {
+        background: color-mix(in oklab, var(--accent) 18%, transparent);
+        border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
+      }
+      .btn.selected {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+        background: color-mix(in oklab, var(--accent) 10%, transparent);
+      }
+
+      .input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--fg);
+        outline: none;
+      }
+      .input:focus {
+        border-color: var(--accent);
+      }
+      .inputAffix {
+        display: flex;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: transparent;
+      }
+      .inputAffix:focus-within {
+        border-color: var(--accent);
+      }
+      .inputAffixField {
+        flex: 1 1 auto;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--fg);
+      }
+      .inputAffixSuffix {
+        padding: 0 12px 0 0;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        white-space: nowrap;
+      }
+
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      @media (min-width: 820px) {
+        .grid2 {
+          grid-template-columns: 1fr 1fr;
+          align-items: start;
+        }
+      }
+
+      .bar {
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        overflow: hidden;
+        background: transparent;
+      }
+      .bar > div {
+        height: 100%;
+        background: var(--accent);
+        width: 0%;
+      }
+
+      .loadingRow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid color-mix(in oklab, var(--accent) 35%, var(--border));
+        border-top-color: var(--accent);
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+      .danger {
+        color: var(--danger);
+      }
+      .ok {
+        color: var(--ok);
+      }
+
+      .hide {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="shell">
+        <div class="appCard">
+          <div class="header row" style="justify-content: space-between; align-items: flex-start;">
+            <h1 style="margin: 0;">Collective Intelligence Service</h1>
+            <div class="row">
+              <button class="pill pillButton" id="headerUsernameBtn" type="button">
+                User: <code id="headerUsername">(loading...)</code>
+              </button>
+              <button class="btn" id="backBtn" style="display: none;">Back</button>
+            </div>
+          </div>
+
+          <div class="content" id="cisScrollRoot">
+            <div class="panel hide" id="setUsernamePanel">
+              <h3 style="margin: 0 0 8px; font-size: 14px;">Set username</h3>
+              <label style="display: grid; gap: 6px; margin-top: 8px;">
+                <span class="muted" style="font-size: 13px;">Username</span>
+                <div class="inputAffix">
+                  <input
+                    id="usernameInput"
+                    class="inputAffixField"
+                    maxlength="24"
+                    placeholder="username"
+                  />
+                  <span id="usernameSuffix" class="inputAffixSuffix">_unknown</span>
+                </div>
+              </label>
+              <div class="row" style="margin-top: 10px;">
+                <button class="btn primary" id="saveUsernameBtn" type="button">Save username</button>
+                <button class="btn" id="cancelUsernameBtn" type="button">Cancel</button>
+              </div>
+              <div
+                id="setUsernamePending"
+                class="loadingRow hide"
+                role="status"
+                aria-live="polite"
+                style="margin-top: 10px;"
+              >
+                <span class="spinner" aria-hidden="true"></span>
+                <span>Setting username...</span>
+              </div>
+            </div>
+
+            <!-- Screen 1: Active survey list -->
+            <div class="panel" id="screenActiveList">
+              <div class="row" style="justify-content: space-between; align-items: center;">
+                <h2 style="margin: 0; font-size: 15px;">Active surveys</h2>
+                <div class="row">
+                  <button class="btn" id="addSurveyBtn" type="button">Add survey</button>
+                </div>
+              </div>
+              <p style="margin-top: 0;">Pick a survey to view results and vote.</p>
+
+              <div class="panel hide" id="addSurveyPanel" style="margin-top: 10px;">
+                <h3 style="margin: 0 0 8px; font-size: 14px;">Create survey</h3>
+                <label style="display: grid; gap: 6px; margin-top: 8px;">
+                  <span class="muted" style="font-size: 13px;">Title</span>
+                  <input id="newSurveyTitle" class="input" maxlength="80" />
+                </label>
+                <label style="display: grid; gap: 6px; margin-top: 8px;">
+                  <span class="muted" style="font-size: 13px;">Question</span>
+                  <input id="newSurveyQuestion" class="input" maxlength="160" />
+                </label>
+                <label style="display: grid; gap: 6px; margin-top: 8px;">
+                  <span class="muted" style="font-size: 13px;">Options (one per line)</span>
+                  <textarea
+                    id="newSurveyOptions"
+                    class="input"
+                    rows="4"
+                    placeholder="Option A&#10;Option B&#10;Option C"
+                    style="resize: vertical;"
+                  ></textarea>
+                </label>
+                <label style="display: grid; gap: 6px; margin-top: 8px;">
+                  <span class="muted" style="font-size: 13px;">Active for</span>
+                  <select id="newSurveyDuration" class="input">
+                    <option value="172800000">2 days</option>
+                    <option value="259200000">3 days</option>
+                    <option value="345600000">4 days</option>
+                    <option value="432000000">5 days</option>
+                    <option value="518400000">6 days</option>
+                    <option value="604800000" selected>7 days</option>
+                    <option value="60000">1 minute (testing)</option>
+                  </select>
+                </label>
+                <div class="row" style="margin-top: 10px;">
+                  <button class="btn primary" id="saveSurveyBtn" type="button">Save survey</button>
+                  <button class="btn" id="cancelSurveyBtn" type="button">Cancel</button>
+                </div>
+                <div
+                  id="addSurveyPending"
+                  class="loadingRow hide"
+                  role="status"
+                  aria-live="polite"
+                  style="margin-top: 10px;"
+                >
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span>Creating survey...</span>
+                </div>
+              </div>
+
+              <div id="activeSurveyList" style="display: grid; gap: 10px; margin-top: 10px;"></div>
+            </div>
+
+            <div class="panel archivedDock" id="screenArchivedList">
+              <h3 style="margin: 0 0 8px; font-size: 14px;">Archived surveys</h3>
+              <div id="archivedSurveyList" style="display: grid; gap: 10px;"></div>
+            </div>
+
+            <!-- Screen 2: Survey detail -->
+            <div class="panel hide" id="screenSurvey">
+              <div class="row" style="justify-content: space-between; align-items: center;">
+                <h2 style="margin: 0; font-size: 15px;" id="surveyTitle">(survey)</h2>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <span id="surveyCountdown" class="muted" style="font-size: 12px; font-variant-numeric: tabular-nums;"></span>
+                  <button class="btn" id="addOptionToggleBtn" type="button">Add option</button>
+                </div>
+              </div>
+              <p style="margin-top: 0;" id="surveyQuestion"></p>
+              <div id="votePending" class="loadingRow hide" role="status" aria-live="polite">
+                <span class="spinner" aria-hidden="true"></span>
+                <span>Registering vote...</span>
+              </div>
+
+              <div style="margin-top: 10px; display: grid; gap: 8px;">
+                <div class="hide" id="addOptionPanel">
+                  <div class="muted" style="font-size: 13px; margin-bottom: 8px;">
+                    You can add up to one custom option for this survey.
+                  </div>
+                  <div
+                    id="addOptionHint"
+                    class="muted"
+                    style="font-size: 12px; margin-bottom: 8px;"
+                  ></div>
+                  <div class="row">
+                    <input
+                      id="newOptionInput"
+                      class="input"
+                      maxlength="80"
+                      placeholder="Add your own option"
+                      style="flex: 1 1 240px;"
+                    />
+                  </div>
+                  <div class="row" style="margin-top: 8px;">
+                    <button class="btn primary" id="saveOptionBtn" type="button">Save option</button>
+                    <button class="btn" id="cancelOptionBtn" type="button">Cancel</button>
+                  </div>
+                </div>
+              </div>
+
+              <hr style="border: 0; border-top: 1px solid var(--border); margin: 16px 0;" />
+
+              <h3 style="margin: 0 0 8px; font-size: 14px;">Results</h3>
+              <div id="resultsBars" style="display: grid; gap: 12px; margin-top: 10px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        // --- Minimal native promise bridge (compatible with usernode-bridge.js) ---
+        window.__usernodeBridge = window.__usernodeBridge || { pending: {} };
+        window.__usernodeResolve =
+          window.__usernodeResolve ||
+          function (id, value, error) {
+            const entry = window.__usernodeBridge.pending[id];
+            if (!entry) return;
+            delete window.__usernodeBridge.pending[id];
+            if (error) entry.reject(new Error(error));
+            else entry.resolve(value);
+          };
+
+        function callNative(method, args) {
+          const id = String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+          return new Promise((resolve, reject) => {
+            window.__usernodeBridge.pending[id] = { resolve, reject };
+            if (!window.Usernode || typeof window.Usernode.postMessage !== "function") {
+              delete window.__usernodeBridge.pending[id];
+              reject(
+                new Error(
+                  "Usernode native bridge not available (are you running inside the app WebView, or did you forget to include /usernode-bridge.js?)"
+                )
+              );
+              return;
+            }
+            window.Usernode.postMessage(JSON.stringify({ method, id, args: args || {} }));
+          });
+        }
+
+        async function getNodeAddress() {
+          if (typeof window.getNodeAddress === "function") return await window.getNodeAddress();
+          return await callNative("getNodeAddress");
+        }
+
+        async function sendTransaction(destination_pubkey, amount, memo, opts) {
+          if (typeof window.sendTransaction === "function") {
+            return await window.sendTransaction(destination_pubkey, amount, memo, opts);
+          }
+          return await callNative("sendTransaction", { destination_pubkey, amount, memo });
+        }
+
+        function sleep(ms) {
+          return new Promise((r) => setTimeout(r, ms));
+        }
+
+        // --- CIS configuration ---
+        // You can override at runtime via:
+        //   localStorage.setItem("cis:app_pubkey", "ut1...")
+        // (we also accept the old exocortex keys for backward compatibility)
+        const CIS_APP_PUBKEY =
+          (window.CIS_APP_PUBKEY && String(window.CIS_APP_PUBKEY)) ||
+          window.localStorage.getItem("cis:app_pubkey") ||
+          window.localStorage.getItem("exocortex:app_pubkey") ||
+          "ut1_cis_demo_pubkey";
+
+        // Surveys: start on a list, then drill into a single survey.
+        const DEFAULT_SURVEYS = [];
+        let SURVEYS = DEFAULT_SURVEYS.slice();
+
+        function last6(s) {
+          const v = String(s || "");
+          return v.length >= 6 ? v.slice(-6) : v;
+        }
+
+        function usernameSuffix(address) {
+          const core = last6(address);
+          return core ? `_${core}` : "_unknown";
+        }
+
+        function normalizeUsername(raw, fallback, addressForSuffix) {
+          const suffix = usernameSuffix(addressForSuffix);
+          const maxBaseLen = Math.max(1, 24 - suffix.length);
+          const fallbackValue = (() => {
+            const f = String(fallback || "").trim();
+            if (!f) return `user${suffix}`;
+            if (f.endsWith(suffix)) return f.slice(0, maxBaseLen) + suffix;
+            const stripped = f.replace(/_[A-Za-z0-9]{6}$/, "").slice(0, maxBaseLen);
+            return (stripped || "user") + suffix;
+          })();
+
+          let v = String(raw || "").trim();
+          if (!v) return fallbackValue;
+          v = v.replace(/[^\w-]/g, "");
+          if (!v) return fallbackValue;
+          if (v.endsWith(suffix)) {
+            const base = v.slice(0, -suffix.length).slice(0, maxBaseLen);
+            return (base || "user") + suffix;
+          }
+
+          // If a user pasted another username shape, drop any old suffix-like tail.
+          v = v.replace(/_[A-Za-z0-9]{6}$/, "");
+          const base = v.slice(0, maxBaseLen);
+          return (base || "user") + suffix;
+        }
+
+        function makeMemo(obj) {
+          // Keep it short and parseable.
+          return JSON.stringify(obj);
+        }
+
+        function slugify(s) {
+          return String(s || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "")
+            .slice(0, 40);
+        }
+
+        const ALLOWED_SURVEY_DURATION_MS = new Set([
+          60_000,
+          2 * 24 * 60 * 60 * 1000,
+          3 * 24 * 60 * 60 * 1000,
+          4 * 24 * 60 * 60 * 1000,
+          5 * 24 * 60 * 60 * 1000,
+          6 * 24 * 60 * 60 * 1000,
+          7 * 24 * 60 * 60 * 1000,
+        ]);
+        const DEFAULT_SURVEY_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+        function normalizeSurveyDurationMs(v) {
+          const n = typeof v === "number" ? Math.round(v) : Number(v);
+          if (!Number.isFinite(n)) return DEFAULT_SURVEY_DURATION_MS;
+          return ALLOWED_SURVEY_DURATION_MS.has(n) ? n : DEFAULT_SURVEY_DURATION_MS;
+        }
+
+        function normalizeSurveyDefinition(rawSurvey) {
+          if (!rawSurvey || typeof rawSurvey !== "object") return null;
+          const title = String(rawSurvey.title || "").trim();
+          const question = String(rawSurvey.question || "").trim();
+          const activeDurationMs = normalizeSurveyDurationMs(
+            rawSurvey.active_duration_ms != null
+              ? rawSurvey.active_duration_ms
+              : rawSurvey.duration_ms
+          );
+          const optionsRaw = Array.isArray(rawSurvey.options) ? rawSurvey.options : [];
+          const options = optionsRaw
+            .map((o, i) => {
+              if (!o || typeof o !== "object") return null;
+              const label = String(o.label || "").trim();
+              if (!label) return null;
+              const key = String(o.key || slugify(label) || `opt_${i + 1}`);
+              const amount =
+                typeof o.amount === "number" && Number.isFinite(o.amount)
+                  ? Math.max(1, Math.round(o.amount))
+                  : i + 1;
+              return { key, label, amount };
+            })
+            .filter(Boolean);
+          if (!title || !question || options.length < 2) return null;
+          const idBase = String(rawSurvey.id || slugify(title) || "").trim();
+          if (!idBase) return null;
+          return {
+            id: idBase,
+            title,
+            question,
+            activeDurationMs,
+            options,
+            builtIn: false,
+          };
+        }
+
+        function rebuildSurveysFromTransactions(txs) {
+          const byId = new Map();
+          for (const s of DEFAULT_SURVEYS) byId.set(s.id, s);
+
+          const latestCreated = new Map(); // surveyId -> { survey, ts }
+          for (const rawTx of txs) {
+            const tx = normalizeTx(rawTx);
+            if (!tx || !tx.to || tx.to !== CIS_APP_PUBKEY) continue;
+            const memoObj = parseMemo(tx.memo);
+            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
+            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
+            if (!memoObj || !isCisMemo || memoObj.type !== "create_survey") continue;
+            const survey = normalizeSurveyDefinition(memoObj.survey);
+            if (!survey) continue;
+            const prev = latestCreated.get(survey.id);
+            if (!prev || tx.ts >= prev.ts) {
+              latestCreated.set(survey.id, { survey, ts: tx.ts });
+            }
+          }
+
+          // Deterministic order: defaults first, then custom by most recent tx desc.
+          const custom = Array.from(latestCreated.values())
+            .sort((a, b) => b.ts - a.ts)
+            .map((x) => ({
+              ...x.survey,
+              createdAtMs: x.ts,
+              expiresAtMs: x.ts + normalizeSurveyDurationMs(x.survey.activeDurationMs),
+              archived: Date.now() >= x.ts + normalizeSurveyDurationMs(x.survey.activeDurationMs),
+            }));
+          for (const s of custom) byId.set(s.id, s);
+          SURVEYS = Array.from(byId.values()).map((s) => {
+            if (s.expiresAtMs != null) {
+              return { ...s, archived: Date.now() >= s.expiresAtMs };
+            }
+            return { ...s, archived: false };
+          });
+        }
+
+        function parseMemo(m) {
+          if (m == null) return null;
+          const s = String(m);
+          try {
+            return JSON.parse(s);
+          } catch (_) {
+            return null;
+          }
+        }
+
+        function extractTxTimestampMs(tx) {
+          if (!tx || typeof tx !== "object") return null;
+          const candidates = [
+            tx.created_at,
+            tx.createdAt,
+            tx.timestamp_ms,
+            tx.timestampMs,
+            tx.timestamp,
+            tx.time,
+          ];
+          for (const v of candidates) {
+            if (typeof v === "number" && Number.isFinite(v)) return v < 10_000_000_000 ? v * 1000 : v;
+            if (typeof v === "string" && v.trim()) {
+              const t = Date.parse(v);
+              if (!Number.isNaN(t)) return t;
+            }
+          }
+          return null;
+        }
+
+        function normalizeTransactionsResponse(resp) {
+          if (Array.isArray(resp)) return resp;
+          if (!resp || typeof resp !== "object") return [];
+          if (Array.isArray(resp.items)) return resp.items;
+          if (Array.isArray(resp.transactions)) return resp.transactions;
+          if (resp.data && Array.isArray(resp.data.items)) return resp.data.items;
+          return [];
+        }
+
+        function pick(obj, keys) {
+          for (const k of keys) {
+            if (obj && obj[k] != null) return obj[k];
+          }
+          return null;
+        }
+
+        function normalizeTx(tx) {
+          if (!tx || typeof tx !== "object") return null;
+          const from = pick(tx, ["from_pubkey", "from", "source", "fromAddress", "from_address"]);
+          const to = pick(tx, ["destination_pubkey", "to", "destination", "toAddress", "to_address"]);
+          const memo = pick(tx, ["memo"]);
+          const amount = pick(tx, ["amount"]);
+          const ts = extractTxTimestampMs(tx) || Date.now();
+          const id = pick(tx, ["id", "txid", "tx_id", "hash"]);
+          return {
+            id: id == null ? null : String(id),
+            from: from == null ? null : String(from),
+            to: to == null ? null : String(to),
+            amount: amount == null ? null : amount,
+            memo: memo == null ? null : String(memo),
+            ts,
+            raw: tx,
+          };
+        }
+
+        async function getCisTransactions(limit) {
+          const l = typeof limit === "number" ? limit : 200;
+
+          // Prefer native bridge method if present (we add this in Flutter).
+          if (window.Usernode && typeof window.Usernode.postMessage === "function") {
+            try {
+              const resp = await callNative("getTransactions", {
+                account: CIS_APP_PUBKEY,
+                limit: l,
+              });
+              return normalizeTransactionsResponse(resp);
+            } catch (e) {
+              // Fall through to other strategies.
+            }
+          }
+
+          // Local-dev mock server (usernode-dapp-starter) supports this endpoint.
+          try {
+            const r = await fetch("/__mock/getTransactions", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                owner_pubkey: CIS_APP_PUBKEY,
+                filterOptions: { limit: l },
+              }),
+            });
+            if (r.ok) {
+              const json = await r.json();
+              return normalizeTransactionsResponse(json);
+            }
+          } catch (_) {}
+
+          // If a generic getTransactions exists (remote API), try it as a last resort.
+          if (typeof window.getTransactions === "function") {
+            const resp = await window.getTransactions({ limit: l, account: CIS_APP_PUBKEY });
+            return normalizeTransactionsResponse(resp);
+          }
+
+          throw new Error("No getTransactions() source available");
+        }
+
+        // --- UI wiring ---
+        const $ = (id) => document.getElementById(id);
+        const backBtn = $("backBtn");
+        const headerUsernameBtn = $("headerUsernameBtn");
+
+        const screenActiveList = $("screenActiveList");
+        const screenArchivedList = $("screenArchivedList");
+        const setUsernamePanel = $("setUsernamePanel");
+        const setUsernamePendingEl = $("setUsernamePending");
+        const usernameInputEl = $("usernameInput");
+        const usernameSuffixEl = $("usernameSuffix");
+        const saveUsernameBtn = $("saveUsernameBtn");
+        const cancelUsernameBtn = $("cancelUsernameBtn");
+        const addSurveyBtn = $("addSurveyBtn");
+        const addSurveyPanel = $("addSurveyPanel");
+        const addSurveyPendingEl = $("addSurveyPending");
+        const saveSurveyBtn = $("saveSurveyBtn");
+        const cancelSurveyBtn = $("cancelSurveyBtn");
+        const newSurveyTitleEl = $("newSurveyTitle");
+        const newSurveyQuestionEl = $("newSurveyQuestion");
+        const newSurveyOptionsEl = $("newSurveyOptions");
+        const newSurveyDurationEl = $("newSurveyDuration");
+        const activeSurveyListEl = $("activeSurveyList");
+        const archivedSurveyListEl = $("archivedSurveyList");
+        const screenSurvey = $("screenSurvey");
+        const surveyTitleEl = $("surveyTitle");
+        const surveyQuestionEl = $("surveyQuestion");
+        const votePendingEl = $("votePending");
+        const addOptionToggleBtn = $("addOptionToggleBtn");
+        const addOptionPanelEl = $("addOptionPanel");
+        const newOptionInputEl = $("newOptionInput");
+        const saveOptionBtn = $("saveOptionBtn");
+        const cancelOptionBtn = $("cancelOptionBtn");
+        const addOptionHintEl = $("addOptionHint");
+        const resultsBarsEl = $("resultsBars");
+        const surveyCountdownEl = $("surveyCountdown");
+        const headerUsernameEl = $("headerUsername");
+
+        let currentSurveyId = null;
+        let latestTxs = [];
+        function currentSurvey() {
+          return SURVEYS.find((s) => s.id === currentSurveyId) || null;
+        }
+
+        function setText(el, v) {
+          if (!el) return;
+          el.textContent = v;
+        }
+
+        function setPre(el, v) {
+          if (!el) return;
+          el.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+        }
+
+        function formatArchivedDate(expiresAtMs) {
+          if (!expiresAtMs) return "Archived";
+          const d = new Date(expiresAtMs);
+          const mon = d.toLocaleString(undefined, { month: "short" });
+          const day = d.getDate();
+          const year = d.getFullYear();
+          const now = new Date();
+          if (year === now.getFullYear()) return `Archived ${mon} ${day}`;
+          return `Archived ${mon} ${day}, ${year}`;
+        }
+
+        function formatCountdown(expiresAtMs) {
+          const diff = Math.max(0, expiresAtMs - Date.now());
+          if (diff <= 0) return "Completed";
+          const pad = (n) => String(n).padStart(2, "0");
+          if (diff < 3600000) {
+            // Less than 1 hour: show mm:ss
+            const totalSec = Math.floor(diff / 1000);
+            const mm = Math.floor(totalSec / 60);
+            const ss = totalSec % 60;
+            return `${pad(mm)}:${pad(ss)}`;
+          }
+          const totalMin = Math.floor(diff / 60000);
+          const dd = Math.floor(totalMin / 1440);
+          const hh = Math.floor((totalMin % 1440) / 60);
+          const mm = totalMin % 60;
+          return `${pad(dd)}d ${pad(hh)}h ${pad(mm)}m`;
+        }
+
+        // --- Rubber-band pull on top/bottom edges while preserving normal scroll ---
+        const RUBBER_BAND = {
+          deadzonePx: 6,
+          maxPullPx: 92,
+          constant: 0.56,
+          snapMs: 210,
+          snapEasing: "cubic-bezier(0.2, 0.9, 0.2, 1)",
+          enableScaleY: true,
+          scaleDivisor: 850,
+        };
+
+        function rubberBandDistance(d, dimension, constant) {
+          const abs = Math.abs(d);
+          if (dimension <= 0) return 0;
+          const result = (constant * abs * dimension) / (dimension + constant * abs);
+          return Math.sign(d) * result;
+        }
+
+        function attachRubberBand() {
+          const scroller = document.getElementById("cisScrollRoot");
+          if (!scroller) return;
+
+          let startY = 0;
+          let activePointerId = null;
+          let dragging = false;
+
+          function apply(offset) {
+            if (RUBBER_BAND.enableScaleY) {
+              const s = 1 + Math.abs(offset) / RUBBER_BAND.scaleDivisor;
+              scroller.style.transform = `translateY(${offset}px) scaleY(${s})`;
+            } else {
+              scroller.style.transform = `translateY(${offset}px)`;
+            }
+          }
+
+          function reset() {
+            scroller.style.transition = `transform ${RUBBER_BAND.snapMs}ms ${RUBBER_BAND.snapEasing}`;
+            scroller.style.transform = "";
+            window.setTimeout(() => {
+              scroller.style.transition = "";
+            }, RUBBER_BAND.snapMs + 40);
+          }
+
+          scroller.addEventListener("pointerdown", (e) => {
+            if (e.button != null && e.button !== 0) return;
+            activePointerId = e.pointerId;
+            startY = e.clientY;
+            dragging = true;
+            scroller.style.transition = "";
+          });
+
+          scroller.addEventListener(
+            "pointermove",
+            (e) => {
+              if (!dragging || e.pointerId !== activePointerId) return;
+              const dy = e.clientY - startY;
+              const atTop = scroller.scrollTop <= 0;
+              const atBottom =
+                scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+              const pullingPastTop = atTop && dy > 0;
+              const pullingPastBottom = atBottom && dy < 0;
+
+              if (!pullingPastTop && !pullingPastBottom) return;
+
+              const effectiveDy =
+                Math.abs(dy) <= RUBBER_BAND.deadzonePx
+                  ? 0
+                  : dy - Math.sign(dy) * RUBBER_BAND.deadzonePx;
+
+              const dim = window.innerHeight || 800;
+              let offset = rubberBandDistance(
+                effectiveDy,
+                dim,
+                RUBBER_BAND.constant
+              );
+              const max = RUBBER_BAND.maxPullPx;
+              if (offset > max) offset = max;
+              if (offset < -max) offset = -max;
+
+              apply(offset);
+              e.preventDefault();
+            },
+            { passive: false }
+          );
+
+          function end(e) {
+            if (!dragging || e.pointerId !== activePointerId) return;
+            dragging = false;
+            activePointerId = null;
+            reset();
+          }
+
+          scroller.addEventListener("pointerup", end);
+          scroller.addEventListener("pointercancel", end);
+        }
+
+        function setDisabled(el, v) {
+          if (!el) return;
+          el.disabled = !!v;
+        }
+
+        function show(el, on) {
+          if (!el) return;
+          el.classList.toggle("hide", !on);
+        }
+
+        let me = null;
+        let myUsername = null;
+        let sending = false;
+        let latestVoteKey = null;
+        let myAddedOptionBySurvey = {};
+        let currentOptionByKey = new Map();
+
+        function setUsernameUi(name) {
+          const v = name == null ? "(not set)" : String(name);
+          setText(headerUsernameEl, v);
+        }
+
+        function clearAddSurveyForm() {
+          if (newSurveyTitleEl) newSurveyTitleEl.value = "";
+          if (newSurveyQuestionEl) newSurveyQuestionEl.value = "";
+          if (newSurveyOptionsEl) newSurveyOptionsEl.value = "";
+          if (newSurveyDurationEl) newSurveyDurationEl.value = String(DEFAULT_SURVEY_DURATION_MS);
+        }
+
+        function clearUsernameForm() {
+          if (usernameInputEl) {
+            const suffix = usernameSuffix(me);
+            const full = myUsername || deriveDefaultUsername(me);
+            const base = String(full || "").endsWith(suffix)
+              ? String(full).slice(0, -suffix.length)
+              : String(full || "").replace(/_[A-Za-z0-9]{6}$/, "");
+            usernameInputEl.value = base || "user";
+          }
+          setText(usernameSuffixEl, usernameSuffix(me));
+        }
+
+        function parseOptionsInput(raw) {
+          return String(raw || "")
+            .split(/\r?\n/g)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        }
+
+        function createSurveyFromForm() {
+          const title = String(newSurveyTitleEl && newSurveyTitleEl.value || "").trim();
+          const question = String(newSurveyQuestionEl && newSurveyQuestionEl.value || "").trim();
+          const labels = parseOptionsInput(newSurveyOptionsEl && newSurveyOptionsEl.value);
+          const activeDurationMs = normalizeSurveyDurationMs(
+            newSurveyDurationEl ? newSurveyDurationEl.value : DEFAULT_SURVEY_DURATION_MS
+          );
+          if (!title) throw new Error("Title is required");
+          if (!question) throw new Error("Question is required");
+          if (labels.length < 2) throw new Error("At least 2 options are required");
+
+          const options = labels.map((label, i) => ({
+            key: slugify(label) || `opt_${i + 1}`,
+            label,
+            amount: i + 1,
+          }));
+          const idBase = slugify(title) || "survey";
+          const id = `custom_${idBase}_${Date.now().toString(36)}`;
+          return { id, title, question, options, activeDurationMs, builtIn: false };
+        }
+
+        function setSelectedVote(keyOrNull) {
+          const k = keyOrNull || null;
+          if (!resultsBarsEl) return;
+          const btns = resultsBarsEl.querySelectorAll("button[data-choice]");
+          btns.forEach((b) => {
+            const choice = b.getAttribute("data-choice");
+            b.classList.toggle("selected", choice === k);
+          });
+        }
+
+        function setSending(v) {
+          sending = !!v;
+          show(votePendingEl, sending);
+          show(addSurveyPendingEl, sending && !currentSurveyId);
+          show(setUsernamePendingEl, sending && !currentSurveyId);
+          setDisabled(headerUsernameBtn, sending);
+          setDisabled(saveUsernameBtn, sending);
+          setDisabled(cancelUsernameBtn, sending);
+          setDisabled(usernameInputEl, sending);
+          setDisabled(addSurveyBtn, sending);
+          setDisabled(saveSurveyBtn, sending);
+          setDisabled(cancelSurveyBtn, sending);
+          setDisabled(newSurveyTitleEl, sending);
+          setDisabled(newSurveyQuestionEl, sending);
+          setDisabled(newSurveyOptionsEl, sending);
+          setDisabled(newSurveyDurationEl, sending);
+          if (resultsBarsEl) {
+            const btns = resultsBarsEl.querySelectorAll("button");
+            btns.forEach((b) => setDisabled(b, sending));
+          }
+          setDisabled(addOptionToggleBtn, sending);
+          setDisabled(saveOptionBtn, sending);
+          setDisabled(cancelOptionBtn, sending);
+          setDisabled(newOptionInputEl, sending);
+        }
+
+        function deriveDefaultUsername(address) {
+          return `user${usernameSuffix(address)}`;
+        }
+
+        async function voteFlow(optionKey, optionLabelHint) {
+          const s = currentSurvey();
+          if (!s) throw new Error("No survey selected");
+          if (s.archived) throw new Error("Archived surveys are read-only");
+          const fromCurrent = s.options.find((o) => o.key === optionKey) || null;
+          const fromRendered = currentOptionByKey.get(optionKey) || null;
+          const opt =
+            fromCurrent ||
+            fromRendered ||
+            {
+              key: optionKey,
+              label: optionLabelHint || String(optionKey),
+              amount: null,
+            };
+          setSending(true);
+          const memo = makeMemo({
+            app: "cis",
+            type: "vote",
+            survey: s.id,
+            choice: opt.key,
+          });
+          const amount =
+            typeof opt.amount === "number" && Number.isFinite(opt.amount)
+              ? Math.max(1, Math.round(opt.amount))
+              : 5;
+          await sendTransaction(CIS_APP_PUBKEY, amount, memo, {
+            timeoutMs: 45_000,
+            pollIntervalMs: 800,
+          });
+          // Keep vote highlight and counts synchronized by updating both from the
+          // same transaction snapshot in refreshLoopOnce().
+          await refreshLoopOnce();
+        }
+
+        async function addOptionFlow(labelRaw) {
+          const s = currentSurvey();
+          if (!s) throw new Error("No survey selected");
+          if (s.archived) throw new Error("Archived surveys are read-only");
+          const label = String(labelRaw || "").trim();
+          if (!label) throw new Error("Option text is required");
+          if (myAddedOptionBySurvey[s.id]) {
+            throw new Error("You can only add one option per survey");
+          }
+          const optionKey = slugify(label) || `opt_${Date.now().toString(36)}`;
+          const memo = makeMemo({
+            app: "cis",
+            type: "add_option",
+            survey: s.id,
+            option: { key: optionKey, label },
+          });
+          await sendTransaction(CIS_APP_PUBKEY, 8, memo, {
+            timeoutMs: 45_000,
+            pollIntervalMs: 800,
+          });
+          await refreshLoopOnce();
+        }
+
+        async function setUsernameFlow(raw) {
+          const value = normalizeUsername(raw, deriveDefaultUsername(me), me);
+          if (!value) throw new Error("Username is required");
+          const memo = makeMemo({
+            app: "cis",
+            type: "set_username",
+            username: value,
+          });
+          await sendTransaction(CIS_APP_PUBKEY, 7, memo, {
+            timeoutMs: 45_000,
+            pollIntervalMs: 800,
+          });
+          await refreshLoopOnce();
+        }
+
+        function getMyLatestUsername(txs, address) {
+          if (!address) return null;
+          const meAddr = String(address);
+          let latest = null;
+          let latestTs = -1;
+          for (const rawTx of txs) {
+            const tx = normalizeTx(rawTx);
+            if (!tx || !tx.from || !tx.to) continue;
+            if (tx.from !== meAddr || tx.to !== CIS_APP_PUBKEY) continue;
+            const memoObj = parseMemo(tx.memo);
+            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
+            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
+            if (!memoObj || !isCisMemo || memoObj.type !== "set_username") continue;
+            const u = normalizeUsername(
+              memoObj.username,
+              deriveDefaultUsername(meAddr),
+              meAddr
+            );
+            if (tx.ts >= latestTs) {
+              latestTs = tx.ts;
+              latest = u;
+            }
+          }
+          return latest;
+        }
+
+        function computeResults(txs, myAddress, surveyId) {
+          const s =
+            SURVEYS.find((x) => x.id === surveyId) || SURVEYS[0] || null;
+          if (!s) return { counts: {}, voters: [], meEntry: null };
+          const optionsByKey = new Map();
+          for (const opt of s.options) {
+            if (!opt || !opt.key) continue;
+            optionsByKey.set(String(opt.key), { ...opt });
+          }
+
+          // One custom option per sender: keep the oldest add_option per survey.
+          const oldestOptionBySender = new Map(); // sender -> { key,label,ts }
+          for (const rawTx of txs) {
+            const tx = normalizeTx(rawTx);
+            if (!tx || !tx.from || !tx.to) continue;
+            if (tx.to !== CIS_APP_PUBKEY) continue;
+            const memoObj = parseMemo(tx.memo);
+            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
+            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
+            if (!memoObj || !isCisMemo || memoObj.type !== "add_option") continue;
+            const sv = memoObj.survey == null ? null : String(memoObj.survey);
+            if (sv !== s.id) continue;
+            const optionObj = memoObj.option && typeof memoObj.option === "object"
+              ? memoObj.option
+              : null;
+            const label = optionObj && optionObj.label != null
+              ? String(optionObj.label).trim()
+              : "";
+            if (!label) continue;
+            const rawKey = optionObj && optionObj.key != null
+              ? String(optionObj.key).trim()
+              : slugify(label);
+            const key = rawKey || `opt_${last6(tx.from)}_${String(tx.ts)}`;
+            const prev = oldestOptionBySender.get(tx.from);
+            if (!prev || tx.ts < prev.ts) {
+              oldestOptionBySender.set(tx.from, { key, label, ts: tx.ts, from: tx.from });
+            }
+          }
+
+          // Merge sender-submitted options into survey options with stable unique keys.
+          const added = Array.from(oldestOptionBySender.values()).sort((a, b) => a.ts - b.ts);
+          for (const it of added) {
+            let key = it.key;
+            if (optionsByKey.has(key)) key = `${key}_${last6(it.from)}`;
+            if (optionsByKey.has(key)) key = `${key}_${String(it.ts).slice(-4)}`;
+            optionsByKey.set(key, {
+              key,
+              label: it.label,
+              amount: null,
+              userAdded: true,
+              addedBy: it.from,
+            });
+          }
+          const surveyWithOptions = { ...s, options: Array.from(optionsByKey.values()) };
+
+          // For each sender, track:
+          // - latest username claim
+          // - latest vote
+          const users = new Map(); // from -> { username, usernameTs, voteKey, voteTs }
+
+          for (const rawTx of txs) {
+            const tx = normalizeTx(rawTx);
+            if (!tx || !tx.from || !tx.to) continue;
+            if (tx.to !== CIS_APP_PUBKEY) continue;
+
+            const entry = users.get(tx.from) || {
+              from: tx.from,
+              username: deriveDefaultUsername(tx.from),
+              usernameTs: 0,
+              voteKey: null,
+              voteTs: 0,
+            };
+
+            const memoObj = parseMemo(tx.memo);
+            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
+            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
+
+            if (memoObj && isCisMemo && memoObj.type === "set_username") {
+              const u = normalizeUsername(memoObj.username, entry.username, tx.from);
+              if (tx.ts >= entry.usernameTs) {
+                entry.username = u;
+                entry.usernameTs = tx.ts;
+              }
+              // A username-claim transaction should never be treated as a vote,
+              // even if we also support vote parsing via amount-based fallback.
+              users.set(tx.from, entry);
+              continue;
+            }
+
+            // Vote parsing:
+            let voteKey = null;
+            if (memoObj && isCisMemo && memoObj.type === "vote") {
+              // New shape: { survey, choice }
+              const sv = memoObj.survey == null ? null : String(memoObj.survey);
+              const ch =
+                memoObj.choice != null
+                  ? String(memoObj.choice)
+                  : memoObj.vote != null
+                    ? String(memoObj.vote)
+                    : null;
+              if (!sv || sv === s.id) voteKey = ch == null ? null : ch.trim();
+            } else if (!(memoObj && isCisMemo)) {
+              // Fallback: amount encoding.
+              // Only enabled for the legacy built-in LLM survey shape.
+              if (s.id !== "llm_favorite") {
+                voteKey = null;
+              } else {
+              const amt = tx.amount;
+              const asNum = typeof amt === "number" ? amt : Number(String(amt));
+              if (Number.isFinite(asNum)) {
+                const match = surveyWithOptions.options.find(
+                  (o) => o.amount === Math.round(asNum)
+                );
+                if (match) voteKey = match.key;
+              }
+              }
+            }
+
+            if (
+              voteKey &&
+              surveyWithOptions.options.some((o) => o.key === voteKey)
+            ) {
+              if (tx.ts >= entry.voteTs) {
+                entry.voteKey = voteKey;
+                entry.voteTs = tx.ts;
+              }
+            }
+
+            users.set(tx.from, entry);
+          }
+
+          const counts = {};
+          for (const opt of surveyWithOptions.options) counts[opt.key] = 0;
+          const voters = [];
+          for (const u of users.values()) {
+            if (!u.voteKey) continue;
+            counts[u.voteKey] = (counts[u.voteKey] || 0) + 1;
+            voters.push({ from: u.from, username: u.username, vote: u.voteKey, voteTs: u.voteTs });
+          }
+
+          voters.sort((a, b) => b.voteTs - a.voteTs);
+          const meKey = myAddress == null ? null : String(myAddress);
+          const meEntry = meKey ? users.get(meKey) || null : null;
+          const myAddedOption = meKey ? oldestOptionBySender.get(meKey) || null : null;
+          return {
+            counts,
+            voters,
+            meEntry,
+            survey: surveyWithOptions,
+            myAddedOption,
+          };
+        }
+
+        function renderResults(res) {
+          if (!res || !res.survey) return;
+          const s = res.survey;
+          const c = res.counts;
+          const total = s.options.reduce((acc, o) => acc + (c[o.key] || 0), 0);
+          const pct = (n) => (total > 0 ? Math.round((n / total) * 100) : 0);
+          if (resultsBarsEl) resultsBarsEl.textContent = "";
+          if (resultsBarsEl) {
+            for (const opt of s.options) {
+              const count = c[opt.key] || 0;
+              const row = document.createElement("button");
+              row.className = "btn";
+              row.style.width = "100%";
+              row.style.display = "block";
+              row.style.textAlign = "left";
+              row.setAttribute("data-choice", opt.key);
+              row.disabled = sending || !!s.archived;
+              row.addEventListener("click", async () => {
+                if (sending || s.archived) return;
+                try {
+                  await voteFlow(opt.key, opt.label);
+                } catch (e) {
+                  console.error(e);
+                } finally {
+                  setSending(false);
+                }
+              });
+              const header = document.createElement("div");
+              header.className = "row";
+              header.style.justifyContent = "space-between";
+              const left = document.createElement("strong");
+              left.textContent = opt.label;
+              const right = document.createElement("span");
+              right.className = "muted";
+              right.innerHTML = `<code>${count}</code>`;
+              header.appendChild(left);
+              header.appendChild(right);
+              const bar = document.createElement("div");
+              bar.className = "bar";
+              const inner = document.createElement("div");
+              inner.style.width = pct(count) + "%";
+              bar.appendChild(inner);
+              row.appendChild(header);
+              row.appendChild(bar);
+              resultsBarsEl.appendChild(row);
+            }
+          }
+          currentOptionByKey = new Map();
+          for (const opt of s.options) {
+            currentOptionByKey.set(opt.key, opt);
+          }
+
+        }
+
+        async function refreshLoopOnce() {
+          try {
+            const txs = await getCisTransactions(400);
+            const latestUsername = getMyLatestUsername(txs, me);
+            if (latestUsername) {
+              myUsername = latestUsername;
+              setUsernameUi(myUsername);
+            }
+            rebuildSurveysFromTransactions(txs);
+            latestTxs = txs;
+            renderSurveyList();
+
+            if (currentSurveyId && !SURVEYS.some((s) => s.id === currentSurveyId)) {
+              navigateToList();
+            }
+            if (currentSurveyId) {
+              const res = computeResults(txs, me, currentSurveyId);
+              renderResults(res);
+              // Update detail-screen countdown
+              if (surveyCountdownEl) {
+                if (res.survey.archived) {
+                  delete surveyCountdownEl.dataset.expires;
+                  surveyCountdownEl.textContent = formatArchivedDate(res.survey.expiresAtMs);
+                  surveyCountdownEl.style.display = "";
+                } else if (res.survey.expiresAtMs) {
+                  surveyCountdownEl.dataset.expires = res.survey.expiresAtMs;
+                  surveyCountdownEl.textContent = "⏱ " + formatCountdown(res.survey.expiresAtMs);
+                  surveyCountdownEl.style.display = "";
+                } else {
+                  delete surveyCountdownEl.dataset.expires;
+                  surveyCountdownEl.style.display = "none";
+                }
+              }
+              if (addOptionToggleBtn) {
+                addOptionToggleBtn.style.display = res.survey.archived ? "none" : "";
+              }
+              myAddedOptionBySurvey[currentSurveyId] = res.myAddedOption || null;
+              if (addOptionHintEl) {
+                if (res.myAddedOption) {
+                  addOptionHintEl.textContent = `You already added: "${res.myAddedOption.label}"`;
+                } else {
+                  addOptionHintEl.textContent = "You can add one option for this survey.";
+                }
+              }
+              if (newOptionInputEl) {
+                newOptionInputEl.value = "";
+                setDisabled(newOptionInputEl, !!res.myAddedOption || sending || !!res.survey.archived);
+              }
+              if (addOptionToggleBtn) {
+                setDisabled(addOptionToggleBtn, !!res.myAddedOption || sending || !!res.survey.archived);
+              }
+              if (saveOptionBtn) {
+                setDisabled(
+                  saveOptionBtn,
+                  !!res.myAddedOption || sending || !!res.survey.archived
+                );
+              }
+              if (cancelOptionBtn) setDisabled(cancelOptionBtn, sending);
+              if (res.myAddedOption || res.survey.archived) show(addOptionPanelEl, false);
+
+              // Also reflect the current user's latest vote from chain state.
+              if (res.meEntry && res.meEntry.voteKey) {
+                latestVoteKey = res.meEntry.voteKey;
+                setSelectedVote(res.meEntry.voteKey);
+                if (res.meEntry.username) {
+                  myUsername = String(res.meEntry.username);
+                  setUsernameUi(myUsername);
+                }
+              } else {
+                latestVoteKey = null;
+                setSelectedVote(null);
+              }
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        function navigateToList() {
+          currentSurveyId = null;
+          show(screenActiveList, true);
+          show(screenArchivedList, SURVEYS.some((s) => !!s.archived));
+          show(screenSurvey, false);
+          if (backBtn) backBtn.style.display = "none";
+        }
+
+        function navigateToSurvey(id) {
+          currentSurveyId = id;
+          const s = currentSurvey();
+          if (!s) return;
+          show(screenActiveList, false);
+          show(screenArchivedList, false);
+          show(screenSurvey, true);
+          if (backBtn) backBtn.style.display = "";
+          if (surveyTitleEl) surveyTitleEl.textContent = s.title;
+          if (surveyQuestionEl) surveyQuestionEl.textContent = s.question;
+          if (surveyCountdownEl) {
+            if (s.archived) {
+              delete surveyCountdownEl.dataset.expires;
+              surveyCountdownEl.textContent = formatArchivedDate(s.expiresAtMs);
+              surveyCountdownEl.style.display = "";
+            } else if (s.expiresAtMs) {
+              surveyCountdownEl.dataset.expires = s.expiresAtMs;
+              surveyCountdownEl.textContent = "⏱ " + formatCountdown(s.expiresAtMs);
+              surveyCountdownEl.style.display = "";
+            } else {
+              delete surveyCountdownEl.dataset.expires;
+              surveyCountdownEl.style.display = "none";
+            }
+          }
+          if (addOptionHintEl) addOptionHintEl.textContent = "You can add one option for this survey.";
+          show(addOptionPanelEl, false);
+          if (addOptionToggleBtn) {
+            if (s.archived) {
+              addOptionToggleBtn.style.display = "none";
+            } else {
+              addOptionToggleBtn.style.display = "";
+            }
+          }
+          if (newOptionInputEl) {
+            newOptionInputEl.value = "";
+            setDisabled(newOptionInputEl, !!s.archived);
+          }
+          if (addOptionToggleBtn) setDisabled(addOptionToggleBtn, !!s.archived);
+          if (saveOptionBtn) setDisabled(saveOptionBtn, !!s.archived);
+          if (cancelOptionBtn) setDisabled(cancelOptionBtn, false);
+        }
+
+        function countUniqueVoters(txs, surveyId) {
+          const voters = new Set();
+          for (const rawTx of txs) {
+            const tx = normalizeTx(rawTx);
+            if (!tx || !tx.from || !tx.to) continue;
+            if (tx.to !== CIS_APP_PUBKEY) continue;
+            const memoObj = parseMemo(tx.memo);
+            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
+            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
+            if (!memoObj || !isCisMemo || memoObj.type !== "vote") continue;
+            const sv = memoObj.survey == null ? null : String(memoObj.survey);
+            if (sv !== surveyId) continue;
+            voters.add(tx.from);
+          }
+          return voters.size;
+        }
+
+        function renderSurveyList() {
+          if (!activeSurveyListEl || !archivedSurveyListEl) return;
+          activeSurveyListEl.textContent = "";
+          archivedSurveyListEl.textContent = "";
+
+          const active = SURVEYS.filter((s) => !s.archived);
+          const archived = SURVEYS.filter((s) => !!s.archived);
+
+          // Hide the archived container entirely when there are no archived surveys
+          // (but don't re-show it if we're currently viewing a survey detail)
+          if (!currentSurveyId) {
+            show(screenArchivedList, archived.length > 0);
+          }
+
+          if (!active.length) {
+            const empty = document.createElement("div");
+            empty.className = "muted";
+            empty.textContent = "No active surveys.";
+            activeSurveyListEl.appendChild(empty);
+          }
+          for (const s of active) {
+            const b = document.createElement("button");
+            b.className = "btn";
+            const countdown = s.expiresAtMs ? formatCountdown(s.expiresAtMs) : "";
+            const votes = countUniqueVoters(latestTxs, s.id);
+            const votesLabel = votes === 1 ? "1 vote" : `${votes} votes`;
+            b.innerHTML =
+              `<div style="display: flex; justify-content: space-between; align-items: center;">` +
+              `<div style="font-weight: 600;">${s.title}</div>` +
+              (countdown ? `<span class="muted countdownTick" data-expires="${s.expiresAtMs}" style="font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: 8px;">⏱ ${countdown}</span>` : "") +
+              `</div>` +
+              `<div class="muted" style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">` +
+              `<span>${s.question}</span>` +
+              `<span style="font-size: 11px; white-space: nowrap; margin-left: 8px;">${votesLabel}</span>` +
+              `</div>`;
+            b.addEventListener("click", () => {
+              navigateToSurvey(s.id);
+              refreshLoopOnce();
+            });
+            activeSurveyListEl.appendChild(b);
+          }
+
+          for (const s of archived) {
+            const b = document.createElement("button");
+            b.className = "btn";
+            const votes = countUniqueVoters(latestTxs, s.id);
+            const votesLabel = votes === 1 ? "1 vote" : `${votes} votes`;
+            const archivedLabel = formatArchivedDate(s.expiresAtMs);
+            b.innerHTML =
+              `<div style="display: flex; justify-content: space-between; align-items: center;">` +
+              `<div style="font-weight: 600;">${s.title}</div>` +
+              `<span class="muted" style="font-size: 11px; white-space: nowrap; margin-left: 8px;">${archivedLabel}</span>` +
+              `</div>` +
+              `<div class="muted" style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">` +
+              `<span>${s.question}</span>` +
+              `<span style="font-size: 11px; white-space: nowrap; margin-left: 8px;">${votesLabel}</span>` +
+              `</div>`;
+            b.addEventListener("click", () => {
+              navigateToSurvey(s.id);
+              refreshLoopOnce();
+            });
+            archivedSurveyListEl.appendChild(b);
+          }
+        }
+
+        async function init() {
+          attachRubberBand();
+          SURVEYS = DEFAULT_SURVEYS.slice();
+
+          try {
+            me = await getNodeAddress();
+          } catch (_) {}
+          myUsername = deriveDefaultUsername(me);
+          setUsernameUi(myUsername);
+
+          setSending(false);
+          renderSurveyList();
+          navigateToList();
+
+          if (backBtn) {
+            backBtn.addEventListener("click", () => {
+              navigateToList();
+            });
+          }
+          if (headerUsernameBtn) {
+            headerUsernameBtn.addEventListener("click", () => {
+              if (sending) return;
+              navigateToList();
+              const opening = setUsernamePanel && setUsernamePanel.classList.contains("hide");
+              show(setUsernamePanel, !!opening);
+              if (opening) clearUsernameForm();
+            });
+          }
+          if (cancelUsernameBtn) {
+            cancelUsernameBtn.addEventListener("click", () => {
+              show(setUsernamePanel, false);
+            });
+          }
+          if (saveUsernameBtn) {
+            saveUsernameBtn.addEventListener("click", async () => {
+              try {
+                setSending(true);
+                await setUsernameFlow(usernameInputEl ? usernameInputEl.value : "");
+                show(setUsernamePanel, false);
+              } catch (e) {
+                const msg = e && e.message ? e.message : String(e);
+                window.alert(msg);
+              } finally {
+                setSending(false);
+              }
+            });
+          }
+          if (addOptionToggleBtn) {
+            addOptionToggleBtn.addEventListener("click", () => {
+              if (sending || !currentSurveyId) return;
+              const opening = addOptionPanelEl && addOptionPanelEl.classList.contains("hide");
+              show(addOptionPanelEl, !!opening);
+              if (!opening && newOptionInputEl) newOptionInputEl.value = "";
+            });
+          }
+          if (cancelOptionBtn) {
+            cancelOptionBtn.addEventListener("click", () => {
+              show(addOptionPanelEl, false);
+              if (newOptionInputEl) newOptionInputEl.value = "";
+            });
+          }
+          if (saveOptionBtn) {
+            saveOptionBtn.addEventListener("click", async () => {
+              if (sending || !currentSurveyId) return;
+              try {
+                setSending(true);
+                await addOptionFlow(newOptionInputEl ? newOptionInputEl.value : "");
+                show(addOptionPanelEl, false);
+                if (newOptionInputEl) newOptionInputEl.value = "";
+              } catch (e) {
+                const msg = e && e.message ? e.message : String(e);
+                window.alert(msg);
+              } finally {
+                setSending(false);
+              }
+            });
+          }
+
+          if (addSurveyBtn) {
+            addSurveyBtn.addEventListener("click", () => {
+              const opening = addSurveyPanel && addSurveyPanel.classList.contains("hide");
+              show(addSurveyPanel, !!opening);
+              if (!opening) clearAddSurveyForm();
+            });
+          }
+          if (cancelSurveyBtn) {
+            cancelSurveyBtn.addEventListener("click", () => {
+              show(addSurveyPanel, false);
+              clearAddSurveyForm();
+            });
+          }
+          if (saveSurveyBtn) {
+            saveSurveyBtn.addEventListener("click", async () => {
+              try {
+                const survey = createSurveyFromForm();
+                setSending(true);
+                const memo = makeMemo({
+                  app: "cis",
+                  type: "create_survey",
+                  survey: {
+                    id: survey.id,
+                    title: survey.title,
+                    question: survey.question,
+                    active_duration_ms: survey.activeDurationMs,
+                    options: survey.options,
+                  },
+                });
+                // Reserve 9 as the create-survey tx amount to avoid collisions
+                // with vote amount fallbacks used in the built-in LLM survey.
+                await sendTransaction(CIS_APP_PUBKEY, 9, memo, {
+                  timeoutMs: 45_000,
+                  pollIntervalMs: 800,
+                });
+                await refreshLoopOnce();
+                show(addSurveyPanel, false);
+                clearAddSurveyForm();
+              } catch (e) {
+                const msg = e && e.message ? e.message : String(e);
+                // Keep this lightweight; no extra status area needed.
+                window.alert(msg);
+              } finally {
+                setSending(false);
+              }
+            });
+          }
+
+          // Results polling
+          await refreshLoopOnce();
+          window.setInterval(refreshLoopOnce, 4000);
+
+          // 1-second ticker for sub-hour countdowns
+          window.setInterval(() => {
+            document.querySelectorAll(".countdownTick[data-expires]").forEach((el) => {
+              const exp = Number(el.dataset.expires);
+              if (exp) el.textContent = "⏱ " + formatCountdown(exp);
+            });
+            if (surveyCountdownEl && surveyCountdownEl.dataset.expires) {
+              const exp = Number(surveyCountdownEl.dataset.expires);
+              if (exp) surveyCountdownEl.textContent = "⏱ " + formatCountdown(exp);
+            }
+          }, 1000);
+        }
+
+        init();
+      })();
+    </script>
+  </body>
+</html>

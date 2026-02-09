@@ -45,6 +45,55 @@ function readJson(req) {
   });
 }
 
+function contentTypeFor(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+      return "application/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".svg":
+      return "image/svg+xml; charset=utf-8";
+    case ".txt":
+      return "text/plain; charset=utf-8";
+    case ".ico":
+      return "image/x-icon";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function safeResolveFromRoot(rootDir, urlPathname) {
+  // Normalize and prevent path traversal outside rootDir.
+  // - strip leading slash
+  // - decode URL components best-effort
+  const raw = (urlPathname || "/").replace(/^\/+/, "");
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(raw);
+    } catch (_) {
+      return raw;
+    }
+  })();
+
+  const normalized = path.normalize(decoded);
+  const abs = path.resolve(rootDir, normalized);
+  const rootAbs = path.resolve(rootDir);
+  if (!abs.startsWith(rootAbs + path.sep) && abs !== rootAbs) return null;
+  return abs;
+}
+
 const server = http.createServer((req, res) => {
   if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "POST") {
     return send(res, 405, { "content-type": "text/plain" }, "Method Not Allowed");
@@ -127,7 +176,11 @@ const server = http.createServer((req, res) => {
           memo,
           created_at: new Date().toISOString(),
         };
-        mockTransactions.push(tx);
+        // Simulate network / mempool / indexing latency in local-dev mode so dapps
+        // can exercise "wait until visible in getTransactions" flows.
+        setTimeout(() => {
+          mockTransactions.push(tx);
+        }, 5000);
 
         return send(
           res,
@@ -190,34 +243,74 @@ const server = http.createServer((req, res) => {
       });
   }
 
-  fs.readFile(INDEX_PATH, (err, buf) => {
-    if (err) {
-      return send(
-        res,
-        500,
-        { "content-type": "text/plain" },
-        `Failed to read index.html: ${err.message}\n`
-      );
+  // Static file serving:
+  // - "/" serves index.html
+  // - "/foo.html" serves "./foo.html"
+  // - "/subdir/" serves "./subdir/index.html" if present
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return send(res, 405, { "content-type": "text/plain" }, "Method Not Allowed");
+  }
+
+  const rootDir = __dirname;
+  let filePath;
+  if (pathname === "/" || pathname === "") {
+    filePath = INDEX_PATH;
+  } else {
+    const resolved = safeResolveFromRoot(rootDir, pathname);
+    if (!resolved) {
+      return send(res, 400, { "content-type": "text/plain" }, "Bad Request");
+    }
+    filePath = resolved;
+  }
+
+  fs.stat(filePath, (stErr, st) => {
+    if (stErr) {
+      return send(res, 404, { "content-type": "text/plain" }, "Not Found");
     }
 
-    if (req.method === "HEAD") {
-      res.writeHead(200, {
-        "content-type": "text/html; charset=utf-8",
+    // If a directory is requested, try to serve its index.html.
+    if (st.isDirectory()) {
+      const dirIndex = path.join(filePath, "index.html");
+      return fs.readFile(dirIndex, (dirErr, buf) => {
+        if (dirErr) {
+          return send(res, 404, { "content-type": "text/plain" }, "Not Found");
+        }
+        const headers = {
+          "content-type": "text/html; charset=utf-8",
+          "content-length": buf.length,
+          "cache-control": "no-store",
+        };
+        if (req.method === "HEAD") {
+          res.writeHead(200, headers);
+          return res.end();
+        }
+        return send(res, 200, headers, buf);
+      });
+    }
+
+    return fs.readFile(filePath, (err, buf) => {
+      if (err) {
+        return send(
+          res,
+          500,
+          { "content-type": "text/plain" },
+          `Failed to read file: ${err.message}\n`
+        );
+      }
+
+      const headers = {
+        "content-type": contentTypeFor(filePath),
         "content-length": buf.length,
         "cache-control": "no-store",
-      });
-      return res.end();
-    }
+      };
 
-    return send(
-      res,
-      200,
-      {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-      },
-      buf
-    );
+      if (req.method === "HEAD") {
+        res.writeHead(200, headers);
+        return res.end();
+      }
+
+      return send(res, 200, headers, buf);
+    });
   });
 });
 

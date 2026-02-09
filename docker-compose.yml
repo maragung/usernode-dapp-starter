@@ -1,0 +1,9 @@
+services:
+  dapp-starter:
+    build: .
+    container_name: dapp-starter
+    environment:
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

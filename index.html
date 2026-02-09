@@ -80,6 +80,12 @@
       a.button:hover {
         border-color: var(--accent);
       }
+      a.button[aria-disabled="true"] {
+        opacity: 0.55;
+        filter: grayscale(0.2);
+        cursor: not-allowed;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -133,7 +139,7 @@
           </div>
         </div>
         <div class="row">
-          <a class="button" href="#" id="sendTxBtn">Send 1 token</a>
+          <a class="button" href="#" id="sendTxBtn">Send Transaction</a>
         </div>
         <pre id="sendTxStatus" style="margin: 10px 0 0; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;">(idle)</pre>
 
@@ -242,17 +248,32 @@
           }
 
           if (sendBtn) {
+            let sending = false;
+            function setSending(v) {
+              sending = !!v;
+              sendBtn.setAttribute("aria-disabled", sending ? "true" : "false");
+            }
+            setSending(false);
+
             sendBtn.addEventListener("click", async (ev) => {
               ev.preventDefault();
+              if (sending) return;
               try {
-                setSendStatus("sending...");
+                setSending(true);
+                setSendStatus("sending... (waiting for it to appear in getTransactions)");
                 const memo = getMemoValue();
                 const result = await window.sendTransaction(APP_PUBKEY, FIXED_AMOUNT, memo);
-                setSendStatus(result);
+                setSendStatus({
+                  status: "sent",
+                  note: "transaction is now visible in getTransactions",
+                  result,
+                });
                 // Generate a new random memo after sending (user can still edit before next send).
                 setMemoValue(randomMemo());
               } catch (e) {
                 setSendStatus(`(error: ${e && e.message ? e.message : String(e)})`);
+              } finally {
+                setSending(false);
               }
             });
           }

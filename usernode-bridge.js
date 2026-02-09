@@ -37,6 +37,164 @@
     });
   }
 
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function normalizeTransactionsResponse(resp) {
+    if (Array.isArray(resp)) return resp;
+    if (!resp || typeof resp !== "object") return [];
+    if (Array.isArray(resp.items)) return resp.items;
+    if (Array.isArray(resp.transactions)) return resp.transactions;
+    if (resp.data && Array.isArray(resp.data.items)) return resp.data.items;
+    return [];
+  }
+
+  function extractTxId(sendResult) {
+    if (!sendResult) return null;
+    // Common shapes:
+    // - { tx: { id } } (local mock)
+    // - { txid } / { txId } / { hash } / { tx_hash }
+    // - { tx: { txid/hash/... } }
+    const candidates = [];
+    if (typeof sendResult === "string") candidates.push(sendResult);
+    if (typeof sendResult === "object") {
+      candidates.push(
+        sendResult.txid,
+        sendResult.txId,
+        sendResult.hash,
+        sendResult.tx_hash,
+        sendResult.txHash,
+        sendResult.id
+      );
+      if (sendResult.tx && typeof sendResult.tx === "object") {
+        candidates.push(
+          sendResult.tx.id,
+          sendResult.tx.txid,
+          sendResult.tx.txId,
+          sendResult.tx.hash,
+          sendResult.tx.tx_hash,
+          sendResult.tx.txHash
+        );
+      }
+    }
+    for (const v of candidates) {
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return null;
+  }
+
+  function extractTxTimestampMs(tx) {
+    if (!tx || typeof tx !== "object") return null;
+    const candidates = [
+      tx.created_at,
+      tx.createdAt,
+      tx.timestamp,
+      tx.time,
+      tx.seen_at,
+      tx.seenAt,
+    ];
+    for (const v of candidates) {
+      if (typeof v === "number" && Number.isFinite(v)) {
+        // Heuristic: seconds vs ms
+        return v < 10_000_000_000 ? v * 1000 : v;
+      }
+      if (typeof v === "string" && v.trim()) {
+        const t = Date.parse(v);
+        if (!Number.isNaN(t)) return t;
+      }
+    }
+    return null;
+  }
+
+  function txMatches(tx, expected) {
+    if (!tx || typeof tx !== "object") return false;
+
+    if (expected.txId) {
+      const txIdCandidates = [
+        tx.id,
+        tx.txid,
+        tx.txId,
+        tx.hash,
+        tx.tx_hash,
+        tx.txHash,
+      ]
+        .filter((v) => typeof v === "string")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (txIdCandidates.includes(expected.txId)) return true;
+    }
+
+    // Avoid accidentally matching an older tx (e.g. duplicate memo).
+    // Only enforce this when we can parse a timestamp from the tx object.
+    if (typeof expected.minCreatedAtMs === "number") {
+      const txTime = extractTxTimestampMs(tx);
+      if (typeof txTime === "number") {
+        // Allow slight clock skew / server ordering delay.
+        const SKEW_MS = 5_000;
+        if (txTime < expected.minCreatedAtMs - SKEW_MS) return false;
+      }
+    }
+
+    // Fallback: match by memo + basic fields (memo is commonly unique per send).
+    if (expected.memo != null) {
+      const memo = tx.memo == null ? null : String(tx.memo);
+      if (memo !== expected.memo) return false;
+    }
+    if (expected.destination_pubkey != null) {
+      const dest =
+        tx.destination_pubkey == null ? null : String(tx.destination_pubkey);
+      if (dest !== expected.destination_pubkey) return false;
+    }
+    if (expected.from_pubkey != null) {
+      const from = tx.from_pubkey == null ? null : String(tx.from_pubkey);
+      if (from !== expected.from_pubkey) return false;
+    }
+    if (expected.amount != null) {
+      // Keep this loose: amount might be string/number/bigint-like.
+      const a = tx.amount;
+      if (String(a) !== String(expected.amount)) return false;
+    }
+    return true;
+  }
+
+  async function waitForTransactionVisible(expected, opts) {
+    const timeoutMs =
+      opts && typeof opts.timeoutMs === "number" ? opts.timeoutMs : 20_000;
+    const pollIntervalMs =
+      opts && typeof opts.pollIntervalMs === "number" ? opts.pollIntervalMs : 750;
+    const limit = opts && typeof opts.limit === "number" ? opts.limit : 50;
+    const filterOptions =
+      (opts && opts.filterOptions && typeof opts.filterOptions === "object"
+        ? opts.filterOptions
+        : null) || {};
+
+    const startedAt = Date.now();
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      attempt++;
+      const resp = await window.getTransactions({ limit, ...filterOptions });
+      const items = normalizeTransactionsResponse(resp);
+      const found = items.find((tx) => txMatches(tx, expected));
+      if (found) return found;
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        const details = [
+          expected.txId ? `txId=${expected.txId}` : null,
+          expected.memo != null ? `memo=${expected.memo}` : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        throw new Error(
+          `Timed out waiting for transaction to appear in getTransactions (${timeoutMs}ms, ${attempt} polls${details ? `, ${details}` : ""
+          })`
+        );
+      }
+      await sleep(pollIntervalMs);
+    }
+  }
+
   function randomHex(bytes) {
     const a = new Uint8Array(bytes);
     if (window.crypto && window.crypto.getRandomValues) {
@@ -86,24 +244,50 @@
   if (typeof window.sendTransaction !== "function") {
     if (window.usernode.isNative) {
       // dapp mode: go through the WebView native bridge.
-      window.sendTransaction = function sendTransaction(
+      window.sendTransaction = async function sendTransaction(
         destination_pubkey,
         amount,
-        memo
+        memo,
+        opts
       ) {
-        return callNative("sendTransaction", {
+        const startedAt = Date.now();
+        const from_pubkey = await window
+          .getNodeAddress()
+          .then((v) => (v == null ? null : String(v).trim()))
+          .catch(() => null);
+        const sendResult = await callNative("sendTransaction", {
           destination_pubkey,
           amount,
           memo,
         });
+        const shouldWait =
+          !opts || opts.waitForInclusion == null ? true : !!opts.waitForInclusion;
+        if (shouldWait) {
+          const txId = extractTxId(sendResult);
+          await waitForTransactionVisible(
+            {
+              txId,
+              minCreatedAtMs: startedAt,
+              memo: memo == null ? null : String(memo),
+              destination_pubkey:
+                destination_pubkey == null ? null : String(destination_pubkey),
+              from_pubkey: from_pubkey ? from_pubkey : null,
+              amount,
+            },
+            opts
+          );
+        }
+        return sendResult;
       };
     } else {
       // local dev mode: go through server.js mock endpoints (requires --local-dev flag).
       window.sendTransaction = async function sendTransaction(
         destination_pubkey,
         amount,
-        memo
+        memo,
+        opts
       ) {
+        const startedAt = Date.now();
         const resp = await fetch("/__mock/sendTransaction", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -126,7 +310,29 @@
             `Mock sendTransaction failed (${resp.status}): ${text}`
           );
         }
-        return await resp.json();
+        const sendResult = await resp.json();
+        const shouldWait =
+          !opts || opts.waitForInclusion == null ? true : !!opts.waitForInclusion;
+        if (shouldWait) {
+          const from_pubkey = await window
+            .getNodeAddress()
+            .then((v) => (v == null ? null : String(v).trim()))
+            .catch(() => null);
+          const txId = extractTxId(sendResult);
+          await waitForTransactionVisible(
+            {
+              txId,
+              minCreatedAtMs: startedAt,
+              memo: memo == null ? null : String(memo),
+              destination_pubkey:
+                destination_pubkey == null ? null : String(destination_pubkey),
+              from_pubkey: from_pubkey ? from_pubkey : null,
+              amount,
+            },
+            opts
+          );
+        }
+        return sendResult;
       };
     }
   }
