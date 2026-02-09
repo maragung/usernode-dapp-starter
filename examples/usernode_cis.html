@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Collective Intelligence Service</title>
+    <title>Usernode Collective Intelligence Service</title>
     <!-- Provides `getNodeAddress()`, `sendTransaction()`, and `getTransactions()` in both
          native (Flutter WebView) and local-dev (browser) modes. -->
     <script src="/usernode-bridge.js"></script>
@@ -287,7 +287,7 @@
       <div class="shell">
         <div class="appCard">
           <div class="header row" style="justify-content: space-between; align-items: flex-start;">
-            <h1 style="margin: 0;">Collective Intelligence Service</h1>
+            <h1 style="margin: 0;">Usernode Collective Intelligence Service</h1>
             <div class="row">
               <button class="pill pillButton" id="headerUsernameBtn" type="button">
                 User: <code id="headerUsername">(loading...)</code>
@@ -489,10 +489,6 @@
           return await callNative("sendTransaction", { destination_pubkey, amount, memo });
         }
 
-        function sleep(ms) {
-          return new Promise((r) => setTimeout(r, ms));
-        }
-
         // --- CIS configuration ---
         // You can override at runtime via:
         //   localStorage.setItem("cis:app_pubkey", "ut1...")
@@ -503,9 +499,8 @@
           window.localStorage.getItem("exocortex:app_pubkey") ||
           "ut1_cis_demo_pubkey";
 
-        // Surveys: start on a list, then drill into a single survey.
-        const DEFAULT_SURVEYS = [];
-        let SURVEYS = DEFAULT_SURVEYS.slice();
+        // Surveys: rebuilt from on-chain transactions each refresh cycle.
+        let SURVEYS = [];
 
         function last6(s) {
           const v = String(s || "");
@@ -589,11 +584,7 @@
               const label = String(o.label || "").trim();
               if (!label) return null;
               const key = String(o.key || slugify(label) || `opt_${i + 1}`);
-              const amount =
-                typeof o.amount === "number" && Number.isFinite(o.amount)
-                  ? Math.max(1, Math.round(o.amount))
-                  : i + 1;
-              return { key, label, amount };
+              return { key, label };
             })
             .filter(Boolean);
           if (!title || !question || options.length < 2) return null;
@@ -610,21 +601,14 @@
         }
 
         function rebuildSurveysFromTransactions(txs) {
-          const byId = new Map();
-          for (const s of DEFAULT_SURVEYS) byId.set(s.id, s);
-
           // Collect all valid create_survey txs with sender + timestamp.
           const allCreations = []; // { survey, ts, from }
           for (const rawTx of txs) {
-            const tx = normalizeTx(rawTx);
-            if (!tx || !tx.from || !tx.to || tx.to !== CIS_APP_PUBKEY) continue;
-            const memoObj = parseMemo(tx.memo);
-            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
-            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
-            if (!memoObj || !isCisMemo || memoObj.type !== "create_survey") continue;
-            const survey = normalizeSurveyDefinition(memoObj.survey);
+            const parsed = parseCisTx(rawTx);
+            if (!parsed || parsed.memo.type !== "create_survey") continue;
+            const survey = normalizeSurveyDefinition(parsed.memo.survey);
             if (!survey) continue;
-            allCreations.push({ survey, ts: tx.ts, from: tx.from });
+            allCreations.push({ survey, ts: parsed.tx.ts, from: parsed.tx.from });
           }
 
           // Sort oldest-first so we enforce the 24h cooldown chronologically.
@@ -647,22 +631,19 @@
             }
           }
 
-          // Deterministic order: defaults first, then custom by most recent tx desc.
-          const custom = Array.from(latestCreated.values())
+          // Order by most recent creation first.
+          const now = Date.now();
+          SURVEYS = Array.from(latestCreated.values())
             .sort((a, b) => b.ts - a.ts)
-            .map((x) => ({
-              ...x.survey,
-              createdAtMs: x.ts,
-              expiresAtMs: x.ts + normalizeSurveyDurationMs(x.survey.activeDurationMs),
-              archived: Date.now() >= x.ts + normalizeSurveyDurationMs(x.survey.activeDurationMs),
-            }));
-          for (const s of custom) byId.set(s.id, s);
-          SURVEYS = Array.from(byId.values()).map((s) => {
-            if (s.expiresAtMs != null) {
-              return { ...s, archived: Date.now() >= s.expiresAtMs };
-            }
-            return { ...s, archived: false };
-          });
+            .map((x) => {
+              const expiresAtMs = x.ts + x.survey.activeDurationMs;
+              return {
+                ...x.survey,
+                createdAtMs: x.ts,
+                expiresAtMs,
+                archived: now >= expiresAtMs,
+              };
+            });
         }
 
         function parseMemo(m) {
@@ -729,6 +710,20 @@
             raw: tx,
           };
         }
+
+        // Shared: normalize a raw tx and parse its CIS memo in one step.
+        // Returns { tx, memo } or null if it's not a valid CIS transaction.
+        function parseCisTx(rawTx) {
+          const tx = normalizeTx(rawTx);
+          if (!tx || !tx.from || !tx.to || tx.to !== CIS_APP_PUBKEY) return null;
+          const memoObj = parseMemo(tx.memo);
+          if (!memoObj) return null;
+          const app = memoObj.app ? String(memoObj.app) : null;
+          if (app !== "cis" && app !== "exocortex") return null;
+          return { tx, memo: memoObj };
+        }
+
+        const TX_SEND_OPTS = { timeoutMs: 45_000, pollIntervalMs: 800 };
 
         async function getCisTransactions(limit) {
           const l = typeof limit === "number" ? limit : 200;
@@ -819,11 +814,6 @@
         function setText(el, v) {
           if (!el) return;
           el.textContent = v;
-        }
-
-        function setPre(el, v) {
-          if (!el) return;
-          el.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
         }
 
         function formatArchivedDate(expiresAtMs) {
@@ -1013,7 +1003,6 @@
           const options = labels.map((label, i) => ({
             key: slugify(label) || `opt_${i + 1}`,
             label,
-            amount: i + 1,
           }));
           const idBase = slugify(title) || "survey";
           const id = `custom_${idBase}_${Date.now().toString(36)}`;
@@ -1072,7 +1061,6 @@
             {
               key: optionKey,
               label: optionLabelHint || String(optionKey),
-              amount: null,
             };
           setSending(true);
           const memo = makeMemo({
@@ -1081,14 +1069,7 @@
             survey: s.id,
             choice: opt.key,
           });
-          const amount =
-            typeof opt.amount === "number" && Number.isFinite(opt.amount)
-              ? Math.max(1, Math.round(opt.amount))
-              : 5;
-          await sendTransaction(CIS_APP_PUBKEY, amount, memo, {
-            timeoutMs: 45_000,
-            pollIntervalMs: 800,
-          });
+          await sendTransaction(CIS_APP_PUBKEY, 1, memo, TX_SEND_OPTS);
           // Keep vote highlight and counts synchronized by updating both from the
           // same transaction snapshot in refreshLoopOnce().
           await refreshLoopOnce();
@@ -1110,10 +1091,7 @@
             survey: s.id,
             option: { key: optionKey, label },
           });
-          await sendTransaction(CIS_APP_PUBKEY, 8, memo, {
-            timeoutMs: 45_000,
-            pollIntervalMs: 800,
-          });
+          await sendTransaction(CIS_APP_PUBKEY, 1, memo, TX_SEND_OPTS);
           await refreshLoopOnce();
         }
 
@@ -1125,10 +1103,7 @@
             type: "set_username",
             username: value,
           });
-          await sendTransaction(CIS_APP_PUBKEY, 7, memo, {
-            timeoutMs: 45_000,
-            pollIntervalMs: 800,
-          });
+          await sendTransaction(CIS_APP_PUBKEY, 1, memo, TX_SEND_OPTS);
           await refreshLoopOnce();
         }
 
@@ -1138,20 +1113,16 @@
           let latest = null;
           let latestTs = -1;
           for (const rawTx of txs) {
-            const tx = normalizeTx(rawTx);
-            if (!tx || !tx.from || !tx.to) continue;
-            if (tx.from !== meAddr || tx.to !== CIS_APP_PUBKEY) continue;
-            const memoObj = parseMemo(tx.memo);
-            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
-            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
-            if (!memoObj || !isCisMemo || memoObj.type !== "set_username") continue;
+            const parsed = parseCisTx(rawTx);
+            if (!parsed || parsed.tx.from !== meAddr) continue;
+            if (parsed.memo.type !== "set_username") continue;
             const u = normalizeUsername(
-              memoObj.username,
+              parsed.memo.username,
               deriveDefaultUsername(meAddr),
               meAddr
             );
-            if (tx.ts >= latestTs) {
-              latestTs = tx.ts;
+            if (parsed.tx.ts >= latestTs) {
+              latestTs = parsed.tx.ts;
               latest = u;
             }
           }
@@ -1165,14 +1136,10 @@
           const meAddr = String(address);
           let latest = null;
           for (const rawTx of txs) {
-            const tx = normalizeTx(rawTx);
-            if (!tx || !tx.from || !tx.to) continue;
-            if (tx.from !== meAddr || tx.to !== CIS_APP_PUBKEY) continue;
-            const memoObj = parseMemo(tx.memo);
-            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
-            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
-            if (!memoObj || !isCisMemo || memoObj.type !== "create_survey") continue;
-            if (latest === null || tx.ts > latest) latest = tx.ts;
+            const parsed = parseCisTx(rawTx);
+            if (!parsed || parsed.tx.from !== meAddr) continue;
+            if (parsed.memo.type !== "create_survey") continue;
+            if (latest === null || parsed.tx.ts > latest) latest = parsed.tx.ts;
           }
           return latest;
         }
@@ -1203,17 +1170,12 @@
           // One custom option per sender: keep the oldest add_option per survey.
           const oldestOptionBySender = new Map(); // sender -> { key,label,ts }
           for (const rawTx of txs) {
-            const tx = normalizeTx(rawTx);
-            if (!tx || !tx.from || !tx.to) continue;
-            if (tx.to !== CIS_APP_PUBKEY) continue;
-            const memoObj = parseMemo(tx.memo);
-            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
-            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
-            if (!memoObj || !isCisMemo || memoObj.type !== "add_option") continue;
-            const sv = memoObj.survey == null ? null : String(memoObj.survey);
+            const parsed = parseCisTx(rawTx);
+            if (!parsed || parsed.memo.type !== "add_option") continue;
+            const sv = parsed.memo.survey == null ? null : String(parsed.memo.survey);
             if (sv !== s.id) continue;
-            const optionObj = memoObj.option && typeof memoObj.option === "object"
-              ? memoObj.option
+            const optionObj = parsed.memo.option && typeof parsed.memo.option === "object"
+              ? parsed.memo.option
               : null;
             const label = optionObj && optionObj.label != null
               ? String(optionObj.label).trim()
@@ -1222,6 +1184,7 @@
             const rawKey = optionObj && optionObj.key != null
               ? String(optionObj.key).trim()
               : slugify(label);
+            const { tx } = parsed;
             const key = rawKey || `opt_${last6(tx.from)}_${String(tx.ts)}`;
             const prev = oldestOptionBySender.get(tx.from);
             if (!prev || tx.ts < prev.ts) {
@@ -1238,7 +1201,6 @@
             optionsByKey.set(key, {
               key,
               label: it.label,
-              amount: null,
               userAdded: true,
               addedBy: it.from,
             });
@@ -1251,9 +1213,9 @@
           const users = new Map(); // from -> { username, usernameTs, voteKey, voteTs }
 
           for (const rawTx of txs) {
-            const tx = normalizeTx(rawTx);
-            if (!tx || !tx.from || !tx.to) continue;
-            if (tx.to !== CIS_APP_PUBKEY) continue;
+            const parsed = parseCisTx(rawTx);
+            if (!parsed) continue;
+            const { tx, memo: memoObj } = parsed;
 
             const entry = users.get(tx.from) || {
               from: tx.from,
@@ -1263,26 +1225,20 @@
               voteTs: 0,
             };
 
-            const memoObj = parseMemo(tx.memo);
-            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
-            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
-
-            if (memoObj && isCisMemo && memoObj.type === "set_username") {
+            if (memoObj.type === "set_username") {
               const u = normalizeUsername(memoObj.username, entry.username, tx.from);
               if (tx.ts >= entry.usernameTs) {
                 entry.username = u;
                 entry.usernameTs = tx.ts;
               }
-              // A username-claim transaction should never be treated as a vote,
-              // even if we also support vote parsing via amount-based fallback.
+              // A username-claim tx should never be treated as a vote.
               users.set(tx.from, entry);
               continue;
             }
 
             // Vote parsing:
             let voteKey = null;
-            if (memoObj && isCisMemo && memoObj.type === "vote") {
-              // New shape: { survey, choice }
+            if (memoObj.type === "vote") {
               const sv = memoObj.survey == null ? null : String(memoObj.survey);
               const ch =
                 memoObj.choice != null
@@ -1291,21 +1247,6 @@
                     ? String(memoObj.vote)
                     : null;
               if (!sv || sv === s.id) voteKey = ch == null ? null : ch.trim();
-            } else if (!(memoObj && isCisMemo)) {
-              // Fallback: amount encoding.
-              // Only enabled for the legacy built-in LLM survey shape.
-              if (s.id !== "llm_favorite") {
-                voteKey = null;
-              } else {
-              const amt = tx.amount;
-              const asNum = typeof amt === "number" ? amt : Number(String(amt));
-              if (Number.isFinite(asNum)) {
-                const match = surveyWithOptions.options.find(
-                  (o) => o.amount === Math.round(asNum)
-                );
-                if (match) voteKey = match.key;
-              }
-              }
             }
 
             if (
@@ -1377,7 +1318,9 @@
               left.textContent = opt.label;
               const right = document.createElement("span");
               right.className = "muted";
-              right.innerHTML = `<code>${count}</code>`;
+              const countCode = document.createElement("code");
+              countCode.textContent = count;
+              right.appendChild(countCode);
               header.appendChild(left);
               header.appendChild(right);
               const bar = document.createElement("div");
@@ -1538,17 +1481,13 @@
           if (addOptionHintEl) addOptionHintEl.textContent = "You can add one option for this survey.";
           show(addOptionPanelEl, false);
           if (addOptionToggleBtn) {
-            if (s.archived) {
-              addOptionToggleBtn.style.display = "none";
-            } else {
-              addOptionToggleBtn.style.display = "";
-            }
+            addOptionToggleBtn.style.display = s.archived ? "none" : "";
+            setDisabled(addOptionToggleBtn, !!s.archived);
           }
           if (newOptionInputEl) {
             newOptionInputEl.value = "";
             setDisabled(newOptionInputEl, !!s.archived);
           }
-          if (addOptionToggleBtn) setDisabled(addOptionToggleBtn, !!s.archived);
           if (saveOptionBtn) setDisabled(saveOptionBtn, !!s.archived);
           if (cancelOptionBtn) setDisabled(cancelOptionBtn, false);
         }
@@ -1556,16 +1495,11 @@
         function countUniqueVoters(txs, surveyId) {
           const voters = new Set();
           for (const rawTx of txs) {
-            const tx = normalizeTx(rawTx);
-            if (!tx || !tx.from || !tx.to) continue;
-            if (tx.to !== CIS_APP_PUBKEY) continue;
-            const memoObj = parseMemo(tx.memo);
-            const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
-            const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
-            if (!memoObj || !isCisMemo || memoObj.type !== "vote") continue;
-            const sv = memoObj.survey == null ? null : String(memoObj.survey);
+            const parsed = parseCisTx(rawTx);
+            if (!parsed || parsed.memo.type !== "vote") continue;
+            const sv = parsed.memo.survey == null ? null : String(parsed.memo.survey);
             if (sv !== surveyId) continue;
-            voters.add(tx.from);
+            voters.add(parsed.tx.from);
           }
           return voters.size;
         }
@@ -1590,54 +1524,65 @@
             empty.textContent = "No active surveys.";
             activeSurveyListEl.appendChild(empty);
           }
-          for (const s of active) {
+          // Helper: build a survey-card button using DOM methods (avoids innerHTML XSS).
+          function buildSurveyCard(s, badgeText, badgeClass) {
             const b = document.createElement("button");
             b.className = "btn";
-            const countdown = s.expiresAtMs ? formatCountdown(s.expiresAtMs) : "";
+
+            const topRow = document.createElement("div");
+            topRow.style.cssText = "display:flex;justify-content:space-between;align-items:center;";
+            const titleEl = document.createElement("div");
+            titleEl.style.fontWeight = "600";
+            titleEl.textContent = s.title;
+            topRow.appendChild(titleEl);
+            if (badgeText) {
+              const badge = document.createElement("span");
+              badge.className = badgeClass || "muted";
+              badge.style.cssText = "font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;margin-left:8px;";
+              badge.textContent = badgeText;
+              if (s.expiresAtMs && !s.archived) {
+                badge.classList.add("countdownTick");
+                badge.dataset.expires = s.expiresAtMs;
+              }
+              topRow.appendChild(badge);
+            }
+
+            const botRow = document.createElement("div");
+            botRow.className = "muted";
+            botRow.style.cssText = "margin-top:4px;display:flex;justify-content:space-between;align-items:center;";
+            const questionEl = document.createElement("span");
+            questionEl.textContent = s.question;
             const votes = countUniqueVoters(latestTxs, s.id);
-            const votesLabel = votes === 1 ? "1 vote" : `${votes} votes`;
-            b.innerHTML =
-              `<div style="display: flex; justify-content: space-between; align-items: center;">` +
-              `<div style="font-weight: 600;">${s.title}</div>` +
-              (countdown ? `<span class="muted countdownTick" data-expires="${s.expiresAtMs}" style="font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: 8px;">⏱ ${countdown}</span>` : "") +
-              `</div>` +
-              `<div class="muted" style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">` +
-              `<span>${s.question}</span>` +
-              `<span style="font-size: 11px; white-space: nowrap; margin-left: 8px;">${votesLabel}</span>` +
-              `</div>`;
+            const votesEl = document.createElement("span");
+            votesEl.style.cssText = "font-size:11px;white-space:nowrap;margin-left:8px;";
+            votesEl.textContent = votes === 1 ? "1 vote" : `${votes} votes`;
+            botRow.appendChild(questionEl);
+            botRow.appendChild(votesEl);
+
+            b.appendChild(topRow);
+            b.appendChild(botRow);
             b.addEventListener("click", () => {
               navigateToSurvey(s.id);
               refreshLoopOnce();
             });
-            activeSurveyListEl.appendChild(b);
+            return b;
+          }
+
+          for (const s of active) {
+            const countdown = s.expiresAtMs ? "⏱ " + formatCountdown(s.expiresAtMs) : "";
+            activeSurveyListEl.appendChild(buildSurveyCard(s, countdown, "muted"));
           }
 
           for (const s of archived) {
-            const b = document.createElement("button");
-            b.className = "btn";
-            const votes = countUniqueVoters(latestTxs, s.id);
-            const votesLabel = votes === 1 ? "1 vote" : `${votes} votes`;
-            const archivedLabel = formatArchivedDate(s.expiresAtMs);
-            b.innerHTML =
-              `<div style="display: flex; justify-content: space-between; align-items: center;">` +
-              `<div style="font-weight: 600;">${s.title}</div>` +
-              `<span class="muted" style="font-size: 11px; white-space: nowrap; margin-left: 8px;">${archivedLabel}</span>` +
-              `</div>` +
-              `<div class="muted" style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">` +
-              `<span>${s.question}</span>` +
-              `<span style="font-size: 11px; white-space: nowrap; margin-left: 8px;">${votesLabel}</span>` +
-              `</div>`;
-            b.addEventListener("click", () => {
-              navigateToSurvey(s.id);
-              refreshLoopOnce();
-            });
-            archivedSurveyListEl.appendChild(b);
+            archivedSurveyListEl.appendChild(
+              buildSurveyCard(s, formatArchivedDate(s.expiresAtMs), "muted")
+            );
           }
         }
 
         async function init() {
           attachRubberBand();
-          SURVEYS = DEFAULT_SURVEYS.slice();
+          SURVEYS = [];
 
           try {
             me = await getNodeAddress();
@@ -1750,12 +1695,7 @@
                     options: survey.options,
                   },
                 });
-                // Reserve 9 as the create-survey tx amount to avoid collisions
-                // with vote amount fallbacks used in the built-in LLM survey.
-                await sendTransaction(CIS_APP_PUBKEY, 9, memo, {
-                  timeoutMs: 45_000,
-                  pollIntervalMs: 800,
-                });
+                await sendTransaction(CIS_APP_PUBKEY, 1, memo, TX_SEND_OPTS);
                 await refreshLoopOnce();
                 show(addSurveyPanel, false);
                 clearAddSurveyForm();
