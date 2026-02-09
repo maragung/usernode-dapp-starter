@@ -613,19 +613,37 @@
           const byId = new Map();
           for (const s of DEFAULT_SURVEYS) byId.set(s.id, s);
 
-          const latestCreated = new Map(); // surveyId -> { survey, ts }
+          // Collect all valid create_survey txs with sender + timestamp.
+          const allCreations = []; // { survey, ts, from }
           for (const rawTx of txs) {
             const tx = normalizeTx(rawTx);
-            if (!tx || !tx.to || tx.to !== CIS_APP_PUBKEY) continue;
+            if (!tx || !tx.from || !tx.to || tx.to !== CIS_APP_PUBKEY) continue;
             const memoObj = parseMemo(tx.memo);
             const memoApp = memoObj && memoObj.app ? String(memoObj.app) : null;
             const isCisMemo = memoApp === "cis" || memoApp === "exocortex";
             if (!memoObj || !isCisMemo || memoObj.type !== "create_survey") continue;
             const survey = normalizeSurveyDefinition(memoObj.survey);
             if (!survey) continue;
-            const prev = latestCreated.get(survey.id);
-            if (!prev || tx.ts >= prev.ts) {
-              latestCreated.set(survey.id, { survey, ts: tx.ts });
+            allCreations.push({ survey, ts: tx.ts, from: tx.from });
+          }
+
+          // Sort oldest-first so we enforce the 24h cooldown chronologically.
+          allCreations.sort((a, b) => a.ts - b.ts);
+
+          // Per-sender: only accept a survey if the sender hasn't created one
+          // in the previous 24 hours. Track last accepted creation per sender.
+          const lastAcceptedBySender = new Map(); // sender -> timestamp
+          const latestCreated = new Map(); // surveyId -> { survey, ts }
+          for (const entry of allCreations) {
+            const prev = lastAcceptedBySender.get(entry.from);
+            if (prev != null && entry.ts - prev < SURVEY_COOLDOWN_MS) {
+              // This sender already created a survey within 24h — skip.
+              continue;
+            }
+            lastAcceptedBySender.set(entry.from, entry.ts);
+            const existing = latestCreated.get(entry.survey.id);
+            if (!existing || entry.ts >= existing.ts) {
+              latestCreated.set(entry.survey.id, { survey: entry.survey, ts: entry.ts });
             }
           }
 
