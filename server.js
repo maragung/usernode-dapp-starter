@@ -168,6 +168,16 @@ const server = http.createServer((req, res) => {
           );
         }
 
+        const memoLen = memo != null ? memo.length : 0;
+        const memoType = (() => {
+          try { const m = JSON.parse(memo); return m && m.type ? m.type : "?"; } catch (_) { return "?"; }
+        })();
+        if (memoLen > 1024) {
+          console.warn(`⚠️  MEMO WARNING: ${memoLen} chars (exceeds 1024) — type=${memoType}, from=${from_pubkey.slice(0, 12)}…`);
+        } else {
+          console.log(`📝 memo: ${memoLen} chars — type=${memoType}, from=${from_pubkey.slice(0, 12)}…`);
+        }
+
         const tx = {
           id: crypto.randomUUID(),
           from_pubkey,
