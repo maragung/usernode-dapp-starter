@@ -6,6 +6,7 @@
  */
 
 const SURVEY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_SURVEYS_PER_WINDOW = 3;
 
 // ---------------------------------------------------------------------------
 // Helpers (ported from usernode_cis.html)
@@ -187,12 +188,15 @@ function rebuildSurveys(txs, appPubkey) {
 
   allCreations.sort((a, b) => a.ts - b.ts);
 
-  const lastAcceptedBySender = new Map();
+  const creationsBySender = new Map();
   const latestCreated = new Map();
   for (const entry of allCreations) {
-    const prev = lastAcceptedBySender.get(entry.from);
-    if (prev != null && entry.ts - prev < SURVEY_COOLDOWN_MS) continue;
-    lastAcceptedBySender.set(entry.from, entry.ts);
+    const times = creationsBySender.get(entry.from) || [];
+    const windowStart = entry.ts - SURVEY_COOLDOWN_MS;
+    const recent = times.filter(t => t > windowStart);
+    if (recent.length >= MAX_SURVEYS_PER_WINDOW) continue;
+    recent.push(entry.ts);
+    creationsBySender.set(entry.from, recent);
     const existing = latestCreated.get(entry.survey.id);
     if (!existing || entry.ts >= existing.ts) {
       latestCreated.set(entry.survey.id, {

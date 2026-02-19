@@ -355,7 +355,7 @@
               <div class="panel hide" id="addSurveyPanel" style="margin-top: 10px;">
                 <h3 style="margin: 0 0 8px; font-size: 14px;">Create survey</h3>
                 <div id="surveyCooldownHint" class="muted hide" style="font-size: 12px; margin-bottom: 8px;"></div>
-                <div class="muted" style="font-size: 12px; margin-bottom: 8px;">You can create one survey every 24 hours.</div>
+                <div class="muted" style="font-size: 12px; margin-bottom: 8px;">You can create up to 3 surveys every 24 hours.</div>
                 <label style="display: grid; gap: 6px; margin-top: 8px;">
                   <span class="muted" style="font-size: 13px;">Title</span>
                   <input id="newSurveyTitle" class="input" maxlength="80" />
@@ -664,20 +664,20 @@
             allCreations.push({ survey, ts: parsed.tx.ts, from: parsed.tx.from });
           }
 
-          // Sort oldest-first so we enforce the 24h cooldown chronologically.
+          // Sort oldest-first so we enforce the rolling window chronologically.
           allCreations.sort((a, b) => a.ts - b.ts);
 
-          // Per-sender: only accept a survey if the sender hasn't created one
-          // in the previous 24 hours. Track last accepted creation per sender.
-          const lastAcceptedBySender = new Map(); // sender -> timestamp
+          // Per-sender: only accept a survey if the sender hasn't created
+          // MAX_SURVEYS_PER_WINDOW in the previous 24 hours.
+          const creationsBySender = new Map(); // sender -> [ts, ...]
           const latestCreated = new Map(); // surveyId -> { survey, ts }
           for (const entry of allCreations) {
-            const prev = lastAcceptedBySender.get(entry.from);
-            if (prev != null && entry.ts - prev < SURVEY_COOLDOWN_MS) {
-              // This sender already created a survey within 24h — skip.
-              continue;
-            }
-            lastAcceptedBySender.set(entry.from, entry.ts);
+            const times = creationsBySender.get(entry.from) || [];
+            const windowStart = entry.ts - SURVEY_COOLDOWN_MS;
+            const recent = times.filter(t => t > windowStart);
+            if (recent.length >= MAX_SURVEYS_PER_WINDOW) continue;
+            recent.push(entry.ts);
+            creationsBySender.set(entry.from, recent);
             const existing = latestCreated.get(entry.survey.id);
             if (!existing || entry.ts >= existing.ts) {
               latestCreated.set(entry.survey.id, { survey: entry.survey, ts: entry.ts, from: entry.from });
@@ -1350,23 +1350,28 @@
         }
 
         const SURVEY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+        const MAX_SURVEYS_PER_WINDOW = 3;
 
-        function getMyLastSurveyCreationMs(txs, address) {
-          if (!address) return null;
+        function getMySurveyCreationsInWindow(txs, address) {
+          if (!address) return [];
           const meAddr = String(address);
-          let latest = null;
+          const windowStart = Date.now() - SURVEY_COOLDOWN_MS;
+          const times = [];
           for (const rawTx of txs) {
             const parsed = parseCisTx(rawTx);
             if (!parsed || parsed.tx.from !== meAddr) continue;
             if (parsed.memo.type !== "create_survey") continue;
-            if (latest === null || parsed.tx.ts > latest) latest = parsed.tx.ts;
+            if (parsed.tx.ts > windowStart) times.push(parsed.tx.ts);
           }
-          return latest;
+          return times.sort((a, b) => a - b);
         }
 
-        function formatCooldownRemaining(lastCreationMs) {
-          if (lastCreationMs == null) return null;
-          const diff = (lastCreationMs + SURVEY_COOLDOWN_MS) - Date.now();
+        function formatCooldownRemaining() {
+          const windowStart = Date.now() - SURVEY_COOLDOWN_MS;
+          const recent = mySurveyCreationTimes.filter(t => t > windowStart);
+          if (recent.length < MAX_SURVEYS_PER_WINDOW) return null;
+          const oldest = Math.min(...recent);
+          const diff = (oldest + SURVEY_COOLDOWN_MS) - Date.now();
           if (diff <= 0) return null;
           const pad = (n) => String(n).padStart(2, "0");
           const totalMin = Math.floor(diff / 60000);
@@ -1375,7 +1380,7 @@
           return `${pad(hh)}h ${pad(mm)}m`;
         }
 
-        let lastSurveyCreationMs = null;
+        let mySurveyCreationTimes = [];
 
         function computeResults(txs, myAddress, surveyId) {
           const s =
@@ -1658,12 +1663,13 @@
         }
 
         function isSurveyCooldownActive() {
-          if (lastSurveyCreationMs == null) return false;
-          return Date.now() < lastSurveyCreationMs + SURVEY_COOLDOWN_MS;
+          const windowStart = Date.now() - SURVEY_COOLDOWN_MS;
+          const recent = mySurveyCreationTimes.filter(t => t > windowStart);
+          return recent.length >= MAX_SURVEYS_PER_WINDOW;
         }
 
         function updateSurveyCooldownUi() {
-          const remaining = formatCooldownRemaining(lastSurveyCreationMs);
+          const remaining = formatCooldownRemaining();
           const onCooldown = !!remaining;
           if (surveyCooldownHintEl) {
             if (onCooldown) {
@@ -1695,7 +1701,7 @@
             renderSurveyList();
 
             // Update survey creation cooldown
-            lastSurveyCreationMs = getMyLastSurveyCreationMs(txs, me);
+            mySurveyCreationTimes = getMySurveyCreationsInWindow(txs, me);
             updateSurveyCooldownUi();
 
             if (currentSurveyId && !SURVEYS.some((s) => s.id === currentSurveyId)) {
@@ -2041,7 +2047,7 @@
             saveSurveyBtn.addEventListener("click", async () => {
               try {
                 if (isSurveyCooldownActive()) {
-                  const remaining = formatCooldownRemaining(lastSurveyCreationMs) || "some time";
+                  const remaining = formatCooldownRemaining() || "some time";
                   throw new Error(`You can create another survey in ${remaining}.`);
                 }
                 const survey = createSurveyFromForm();

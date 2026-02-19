@@ -495,7 +495,7 @@ Key transaction types in the CIS example:
 
 | `type` | Payload | Rule |
 |--------|---------|------|
-| `create_survey` | `{ survey: { id, title, question, options, active_duration_ms } }` | One per sender per 24h (enforced on read) |
+| `create_survey` | `{ survey: { id, title, question, options, active_duration_ms } }` | 3 per sender per 24h rolling window (enforced on read) |
 | `vote` | `{ survey: "id", choice: "option_key" }` | Latest per sender per survey wins |
 | `add_option` | `{ survey: "id", option: { key, label } }` | One per sender per survey, oldest wins |
 | `set_username` | `{ username: "name_suffix" }` | Latest per sender wins |
