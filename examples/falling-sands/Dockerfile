@@ -15,8 +15,8 @@ FROM node:20-slim
 
 WORKDIR /app
 
-COPY falling-sands/package.json falling-sands/package-lock.json ./falling-sands/
-RUN cd falling-sands && npm ci --omit=dev
+COPY falling-sands/package.json falling-sands/package-lock.json* ./falling-sands/
+RUN cd falling-sands && { [ -f package-lock.json ] && npm ci --omit=dev || npm install --omit=dev; }
 
 # Shared library (so require('../lib/dapp-server') resolves)
 COPY lib/ lib/

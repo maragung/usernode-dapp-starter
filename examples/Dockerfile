@@ -13,8 +13,8 @@ FROM node:20-slim
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm ci --omit=dev
+COPY package.json package-lock.json* ./
+RUN [ -f package-lock.json ] && npm ci --omit=dev || npm install --omit=dev
 
 # Shared library modules
 COPY lib/ lib/
