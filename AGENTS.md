@@ -697,14 +697,62 @@ const APP_PUBKEY = "ut1zvhmxlhmv95cgzaph6cpv0rrcrn29gr4xkdj9fuykc6648hmvgksmkfua
 
 ---
 
-## 13. Sub-App Server Pattern
+## 13. Combined Examples Server
 
-When a dapp example has its own backend server (like falling-sands), it follows a consistent pattern:
+All example dapps are deployed together from a single `examples/server.js` and a single Docker container. This combined server hosts:
 
-### Server Requirements
+- `/` — dapp-starter demo (`index.html`)
+- `/cis` — Collective Intelligence Service (`cis/usernode_cis.html`)
+- `/falling-sands` — Falling Sands (`falling-sands/index.html`)
+- `/usernode-bridge.js` — shared bridge
+- `/__mock/*` — mock transaction endpoints (when `--local-dev`)
+- `/explorer-api/*` — explorer proxy
+- **WebSocket** — falling-sands simulation stream (same HTTP server)
 
-1. **Explorer API proxy** — must include the same `/explorer-api/*` proxy (see Section 10)
-2. **`APP_PUBKEY`** — define at the top level, matching the client's value
+### How It Works
+
+`examples/server.js` merges the root `server.js` (static serving, mock API, explorer proxy) with `falling-sands/server.js` (WASM simulation, WebSocket streaming, chain polling). The root `server.js` remains untouched as the lightweight template for people cloning the repo.
+
+The falling-sands client already connects to `${location.host}` with no WS path, so it works without changes when served from the combined server.
+
+### Adding a New Example
+
+To add a new static-only example (no backend logic):
+
+1. Create `examples/my-app/index.html`
+2. Add a route in `examples/server.js`:
+
+```js
+"/my-app":  path.join(__dirname, "my-app", "index.html"),
+"/my-app/": path.join(__dirname, "my-app", "index.html"),
+```
+
+3. Add a `COPY` line in `examples/Dockerfile`:
+
+```dockerfile
+COPY my-app/index.html my-app/
+```
+
+To add an example with backend logic (like falling-sands), merge the server-side logic into `examples/server.js` and update the Dockerfile accordingly.
+
+### Standalone Sub-App Servers
+
+Each sub-app (e.g., `falling-sands/`) still has its own `server.js`, `Dockerfile`, and `docker-compose.yml` for independent local development:
+
+```bash
+cd examples/falling-sands
+npm install
+node server.js --local-dev
+```
+
+This is useful for developing a single example in isolation. The combined server is for production deployment.
+
+### Sub-App Server Requirements
+
+When a dapp example has its own backend server, it must include:
+
+1. **Explorer API proxy** — same `/explorer-api/*` proxy (see Section 10)
+2. **`APP_PUBKEY`** — matching the client's value
 3. **Flexible bridge path** — resolve `usernode-bridge.js` locally first, then fall back to root:
 
 ```js
@@ -718,65 +766,6 @@ const BRIDGE_PATH = (() => {
 4. **Mock transaction store** — same `/__mock/*` endpoints as the root server for local-dev mode
 5. **Chain polling** — if the server reacts to on-chain data, implement the pattern from Section 11
 
-### Dockerfile & Docker Compose
-
-Each sub-app has its **own Dockerfile and docker-compose.yml** in its own directory, using local build context. This keeps apps independent — adding a new app doesn't affect existing ones.
-
-The shared `usernode-bridge.js` is copied from the repo root before building (the deploy workflow handles this automatically):
-
-```dockerfile
-# examples/my-app/Dockerfile — uses local context
-COPY server.js index.html ./
-COPY usernode-bridge.js ./
-```
-
-```yaml
-# examples/my-app/docker-compose.yml
-services:
-  my-app:
-    build: .
-    container_name: my-app
-    environment:
-      PORT: "3333"
-      VIRTUAL_HOST: "myapp.usernodelabs.org"
-      VIRTUAL_PORT: "3333"
-    expose:
-      - "3333"
-    networks:
-      - proxy-network
-
-networks:
-  proxy-network:
-    external: true
-```
-
-For local testing, also create a `docker-compose.local.yml` override with port mappings:
-
-```yaml
-# examples/my-app/docker-compose.local.yml
-services:
-  my-app:
-    ports:
-      - "3333:3333"
-    networks:
-      - default
-
-networks:
-  proxy-network:
-    external: false
-```
-
-### Deploy Workflow
-
-The deploy workflow (`.github/workflows/deploy.yml`) copies `usernode-bridge.js` into each sub-app directory then runs `docker compose up` independently:
-
-```bash
-cd "$REPO_DIR/examples/my-app"
-cp "$REPO_DIR/usernode-bridge.js" .
-docker compose down
-docker compose up -d --build
-```
-
 ---
 
 ## 14. File Organization
@@ -784,22 +773,27 @@ docker compose up -d --build
 ```
 ├── index.html                # Main dapp page (replace with your dapp)
 ├── usernode-bridge.js        # The bridge — shared by all dapps, DO NOT EDIT per-dapp
-├── server.js                 # Root dev server + mock API + explorer proxy
+├── server.js                 # Root dev server + mock API + explorer proxy (template)
 ├── scripts/
 │   └── generate-keypair.js   # Generate unique APP_PUBKEY addresses
 ├── examples/
+│   ├── server.js             # Combined examples server (all 3 apps + WASM + WS)
+│   ├── Dockerfile            # Multi-stage build (Rust WASM + Node runtime)
+│   ├── docker-compose.yml    # Production: combined service + nginx-proxy
+│   ├── docker-compose.local.yml # Local override: port mapping
+│   ├── package.json          # Dependencies (ws)
 │   ├── cis/
 │   │   └── usernode_cis.html # Reference: Collective Intelligence Service
 │   └── falling-sands/
-│       ├── server.js              # Standalone server (WASM simulation + WS + chain polling)
+│       ├── server.js              # Standalone server (for independent local dev)
 │       ├── index.html             # Client UI
-│       ├── Dockerfile             # Multi-stage build (Rust WASM + Node runtime)
-│       ├── docker-compose.yml     # Production: own service + nginx-proxy network
-│       ├── docker-compose.local.yml # Local override: port mapping
+│       ├── Dockerfile             # Standalone multi-stage build
+│       ├── docker-compose.yml     # Standalone service
+│       ├── docker-compose.local.yml # Local override
 │       ├── wasm-loader.js         # WASM module loader
 │       └── sandspiel/             # Rust WASM source (git submodule)
-├── Dockerfile                     # Production container (root server)
-├── docker-compose.yml             # Production: root dapp-starter service only
+├── Dockerfile                     # Production container (root template server)
+├── docker-compose.yml             # Root template service (not used for showcase deploy)
 ├── docker-compose.local.yml       # Local override: port mapping
 ├── Makefile                  # make up / make down / make logs
 └── README.md
@@ -850,25 +844,30 @@ localStorage.setItem("myapp:app_pubkey", "ut1_my_custom_pubkey");
 
 ## 16. Docker Deployment
 
-### Production
+### Production (Combined Examples Server)
+
+The showcase deployment uses the combined `examples/` server. The GitHub Actions workflow (`.github/workflows/deploy.yml`) handles this automatically:
+
+1. Copies `usernode-bridge.js` and `index.html` from the repo root into `examples/`
+2. Runs `docker compose up -d --build` in `examples/`
+3. One container serves all three example apps on `dapps.usernodelabs.org`
+
+### Local Testing (Combined Server)
 
 ```bash
-make up      # Build and start
-make logs    # Tail logs
-make down    # Stop and remove
-```
-
-The Dockerfile copies all HTML files and the `examples/` directory. If you add new files to `examples/`, they're included automatically.
-
-### Local Testing
-
-Each service runs independently. The production `docker-compose.yml` files use an external `proxy-network` (nginx-proxy) and only `expose` ports. For local testing, use the override files that add host port mappings.
-
-**Root dapp-starter** (`http://localhost:8000`):
-
-```bash
+cd examples
+cp ../usernode-bridge.js .
+cp ../index.html .
 docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
+
+Then open `http://localhost:8000/`, `http://localhost:8000/cis`, or `http://localhost:8000/falling-sands`.
+
+Stop with `Ctrl+C`, then `docker compose -f docker-compose.yml -f docker-compose.local.yml down`.
+
+### Local Testing (Standalone Sub-Apps)
+
+Each sub-app can also be run independently for focused development:
 
 **Falling-sands** (`http://localhost:3333`):
 
@@ -878,9 +877,17 @@ cp ../../usernode-bridge.js .
 docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
-Stop either with `Ctrl+C`, then `docker compose -f docker-compose.yml -f docker-compose.local.yml down`.
+### Root Template Server
 
-> **Note**: The falling-sands build compiles Rust to WASM in a multi-stage Docker build, so the first build takes several minutes. Subsequent builds are fast due to layer caching.
+The root `docker-compose.yml` and `Dockerfile` remain as the lightweight template for people cloning the repo. They are not used for the showcase deployment.
+
+```bash
+make up      # Build and start (root template server)
+make logs    # Tail logs
+make down    # Stop and remove
+```
+
+> **Note**: The combined examples build compiles Rust to WASM in a multi-stage Docker build, so the first build takes several minutes. Subsequent builds are fast due to layer caching.
 
 ---
 
@@ -914,9 +921,9 @@ This is a starting-point checklist based on the patterns above. Not every item a
 - [ ] Include the explorer API proxy (`/explorer-api/*`)
 - [ ] Implement chain polling with dedup if the server reacts to on-chain data
 - [ ] Use flexible bridge path resolution for `usernode-bridge.js`
-- [ ] Create own `Dockerfile` + `docker-compose.yml` + `docker-compose.local.yml` in the app directory
-- [ ] Add deploy step to `.github/workflows/deploy.yml` (copy bridge.js + docker compose up)
+- [ ] Add routes and logic to `examples/server.js` (combined deployment)
+- [ ] Optionally create a standalone `server.js` + `Dockerfile` + `docker-compose.yml` in the app directory for independent local dev
 
 **Testing:**
-- [ ] Test with `node server.js --local-dev`
-- [ ] Test Docker: `cp ../../usernode-bridge.js . && docker compose -f docker-compose.yml -f docker-compose.local.yml up --build`
+- [ ] Test with `node server.js --local-dev` (root template server)
+- [ ] Test combined server: `cd examples && cp ../usernode-bridge.js . && cp ../index.html . && docker compose -f docker-compose.yml -f docker-compose.local.yml up --build`

@@ -1,6 +1,8 @@
 services:
   falling-sands:
-    build: .
+    build:
+      context: ..
+      dockerfile: falling-sands/Dockerfile
     container_name: falling-sands
     environment:
       PORT: "3333"

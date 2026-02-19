@@ -1,5 +1,3 @@
-# Build context: examples/ (set via docker-compose context: ..)
-#
 # ── Stage 1: Build the WASM module ───────────────────────────────────────────
 FROM rust:1.83-slim AS wasm-builder
 
@@ -15,20 +13,28 @@ FROM node:20-slim
 
 WORKDIR /app
 
-COPY falling-sands/package.json falling-sands/package-lock.json ./falling-sands/
-RUN cd falling-sands && npm ci --omit=dev
+COPY package.json ./
+RUN npm ci --omit=dev
 
-# Shared library (so require('../lib/dapp-server') resolves)
+# Shared library modules
 COPY lib/ lib/
 
-# Falling-sands server, engine, loader, client
-COPY falling-sands/server.js falling-sands/engine.js falling-sands/wasm-loader.js falling-sands/index.html ./falling-sands/
-COPY falling-sands/usernode-bridge.js ./falling-sands/
+# Combined server
+COPY server.js ./
 
-# Built WASM package
+# Shared bridge (copied into examples/ by deploy script)
+COPY usernode-bridge.js ./
+
+# HTML files for all three apps
+COPY index.html ./
+COPY cis/usernode_cis.html cis/
+COPY falling-sands/index.html falling-sands/
+
+# Falling-sands engine + WASM loader + built WASM package
+COPY falling-sands/engine.js falling-sands/
+COPY falling-sands/wasm-loader.js falling-sands/
 COPY --from=wasm-builder /build/sandspiel/crate/pkg/ falling-sands/sandspiel/crate/pkg/
 
-EXPOSE 3333
+EXPOSE 8000
 
-WORKDIR /app/falling-sands
 CMD ["node", "server.js"]

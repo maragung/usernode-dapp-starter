@@ -27,11 +27,22 @@ jobs:
             git pull --recurse-submodules
             git submodule update --init --recursive
 
-            echo "==> Rebuilding and restarting main app..."
+            echo "==> Stopping old containers..."
+            docker compose down || true
+            cd "$REPO_DIR/examples/falling-sands"
+            docker compose down 2>/dev/null || true
+            docker stop falling-sands 2>/dev/null || true
+            docker rm falling-sands 2>/dev/null || true
+
+            echo "==> Deploying combined examples server..."
+            cd "$REPO_DIR/examples"
+            cp "$REPO_DIR/usernode-bridge.js" .
+            cp "$REPO_DIR/index.html" .
+            ls -la usernode-bridge.js index.html
             docker compose down || true
             docker compose up -d --build 2>&1
             docker compose ps
-            echo "==> Main app started."
+            echo "==> Combined examples server started."
 
             echo "==> Rebuilding and restarting CIS bots..."
             cd "$REPO_DIR/examples/cis/bot"
@@ -39,18 +50,6 @@ jobs:
             docker compose up -d --build 2>&1
             docker compose ps
             echo "==> CIS bots started."
-
-            echo "==> Rebuilding and restarting falling-sands..."
-            cd "$REPO_DIR/examples/falling-sands"
-            echo "==> Copying usernode-bridge.js..."
-            cp "$REPO_DIR/usernode-bridge.js" .
-            ls -la usernode-bridge.js
-            docker compose down || true
-            docker stop falling-sands 2>/dev/null || true
-            docker rm falling-sands 2>/dev/null || true
-            docker compose up -d --build 2>&1
-            docker compose ps
-            echo "==> Falling-sands started."
 
             echo "==> All running containers:"
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

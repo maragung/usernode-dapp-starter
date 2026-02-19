@@ -1,45 +1,50 @@
+#!/usr/bin/env node
 /**
- * Standalone falling-sands server.
+ * Combined examples server.
  *
- * Runs the sandspiel simulation server-side and streams the cell state to all
- * connected browser clients over WebSocket. For independent local development
- * of the falling-sands example.
+ * Hosts all three dapp examples from a single process:
+ *   /               — dapp-starter demo (index.html)
+ *   /cis            — Collective Intelligence Service
+ *   /falling-sands  — Falling Sands (with server-side WASM + WebSocket streaming)
  *
- * Usage:
- *   npm install
- *   node server.js              # starts on http://localhost:3333
- *   node server.js --local-dev  # enables mock transaction endpoints
+ * Also provides:
+ *   /usernode-bridge.js   — shared bridge
+ *   /__mock/*             — mock transaction endpoints (--local-dev)
+ *   /explorer-api/*       — explorer proxy
+ *   WebSocket             — falling-sands simulation stream
  */
 
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { handleExplorerProxy, createMockApi, createChainPoller, resolvePath } = require("../lib/dapp-server");
-const createEngine = require("./engine");
+const { handleExplorerProxy, createMockApi, createChainPoller, resolvePath } = require("./lib/dapp-server");
+const createEngine = require("./falling-sands/engine");
 
 // ── CLI flags ────────────────────────────────────────────────────────────────
 const LOCAL_DEV = process.argv.includes("--local-dev");
-const PORT = parseInt(process.env.PORT, 10) || 3333;
-const APP_PUBKEY = "ut1r96pdaa7h2k4vf62w3w598fyrelv9wru4t53qtgswgfzpsvz77msj588uu";
+const PORT = parseInt(process.env.PORT, 10) || 8000;
 
-// ── Static file paths ────────────────────────────────────────────────────────
-const BRIDGE_PATH = resolvePath(
-  path.join(__dirname, "usernode-bridge.js"),
-  path.join(__dirname, "..", "..", "usernode-bridge.js"),
-);
+// Falling-sands app pubkey (for chain polling)
+const SANDS_APP_PUBKEY = "ut1r96pdaa7h2k4vf62w3w598fyrelv9wru4t53qtgswgfzpsvz77msj588uu";
+
+// ── Static file paths (with fallbacks for local dev vs Docker) ───────────────
+const BRIDGE_PATH = resolvePath(path.join(__dirname, "usernode-bridge.js"), path.join(__dirname, "..", "usernode-bridge.js"));
+const INDEX_HTML = resolvePath(path.join(__dirname, "index.html"), path.join(__dirname, "..", "index.html"));
+const CIS_HTML = path.join(__dirname, "cis", "usernode_cis.html");
+const SANDS_HTML = path.join(__dirname, "falling-sands", "index.html");
 
 // ── Mock API ─────────────────────────────────────────────────────────────────
 const mockApi = createMockApi({ localDev: LOCAL_DEV, delayMs: 2000 });
 
-// ── Engine ───────────────────────────────────────────────────────────────────
-const engine = createEngine({ wasmLoaderPath: require.resolve("./wasm-loader") });
+// ── Falling-sands engine ─────────────────────────────────────────────────────
+const engine = createEngine({ wasmLoaderPath: require.resolve("./falling-sands/wasm-loader") });
 
-// Poll mock transactions for drawings
+// Poll mock transactions for falling-sands drawings
 setInterval(() => engine.processMockTransactions(mockApi.transactions), 500);
 
-// ── Chain polling ────────────────────────────────────────────────────────────
+// ── Chain polling for falling-sands ──────────────────────────────────────────
 const poller = createChainPoller({
-  appPubkey: APP_PUBKEY,
+  appPubkey: SANDS_APP_PUBKEY,
   onTransaction(tx) {
     if (!tx.memo) return;
     try {
@@ -65,7 +70,7 @@ const server = http.createServer((req, res) => {
     catch (_) { return req.url || "/"; }
   })();
 
-  // Serve the usernode bridge
+  // Shared bridge
   if (pathname === "/usernode-bridge.js") {
     try {
       const buf = fs.readFileSync(BRIDGE_PATH);
@@ -81,13 +86,23 @@ const server = http.createServer((req, res) => {
   // Explorer proxy
   if (handleExplorerProxy(req, res, pathname)) return;
 
-  // Serve index.html
-  if (pathname === "/" || pathname === "/index.html") {
+  // Static routes
+  const staticRoutes = {
+    "/":               INDEX_HTML,
+    "/index.html":     INDEX_HTML,
+    "/cis":            CIS_HTML,
+    "/cis/":           CIS_HTML,
+    "/falling-sands":  SANDS_HTML,
+    "/falling-sands/": SANDS_HTML,
+  };
+
+  const htmlFile = staticRoutes[pathname];
+  if (htmlFile) {
     try {
-      const buf = fs.readFileSync(path.join(__dirname, "index.html"));
+      const buf = fs.readFileSync(htmlFile);
       return send(res, 200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, buf);
     } catch (e) {
-      return send(res, 500, { "Content-Type": "text/plain" }, "Failed to read index.html: " + e.message);
+      return send(res, 500, { "Content-Type": "text/plain" }, "Failed to read file: " + e.message);
     }
   }
 
@@ -101,17 +116,10 @@ engine.startTickLoop();
 // ── Start ────────────────────────────────────────────────────────────────────
 server.listen(PORT, "0.0.0.0", () => {
   const { width, height, tickHz } = engine.config;
-  console.log(`\nFalling Sands server running at http://localhost:${PORT}`);
-
-  const nets = require("os").networkInterfaces();
-  for (const name of Object.keys(nets)) {
-    for (const iface of nets[name]) {
-      if (iface.family === "IPv4" && !iface.internal) {
-        console.log(`   LAN: http://${iface.address}:${PORT}`);
-      }
-    }
-  }
-
-  console.log(`   Grid: ${width}x${height}  |  Tick rate: ${tickHz} Hz`);
-  console.log(`   Mock API (--local-dev): ${LOCAL_DEV ? "ENABLED" : "disabled"}\n`);
+  console.log(`\nCombined examples server running at http://localhost:${PORT}`);
+  console.log(`  /               — dapp-starter demo`);
+  console.log(`  /cis            — Collective Intelligence Service`);
+  console.log(`  /falling-sands  — Falling Sands (WASM + WebSocket)`);
+  console.log(`  Grid: ${width}x${height}  |  Tick rate: ${tickHz} Hz`);
+  console.log(`  Mock API (--local-dev): ${LOCAL_DEV ? "ENABLED" : "disabled"}\n`);
 });
