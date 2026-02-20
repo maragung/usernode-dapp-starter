@@ -9,7 +9,36 @@
 const http = require("http");
 const https = require("https");
 const fs = require("fs");
+const path = require("path");
 const crypto = require("crypto");
+
+// ── .env loader ─────────────────────────────────────────────────────────────
+// Loads KEY=VALUE pairs from a .env file into process.env (does not overwrite
+// existing env vars). Zero dependencies.
+
+function loadEnvFile(filePath) {
+  if (!filePath) {
+    const candidates = [
+      path.resolve(process.cwd(), ".env"),
+      path.resolve(__dirname, "..", "..", ".env"),
+    ];
+    filePath = candidates.find((p) => fs.existsSync(p));
+  }
+  if (!filePath || !fs.existsSync(filePath)) return;
+  const lines = fs.readFileSync(filePath, "utf8").split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const m = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
+    if (!m) continue;
+    const key = m[1];
+    let val = m[2];
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] == null) process.env[key] = val;
+  }
+}
 
 const EXPLORER_UPSTREAM = "alpha2.usernodelabs.org";
 const EXPLORER_UPSTREAM_BASE = "/explorer/api";
@@ -132,6 +161,16 @@ function createMockApi(opts) {
   const transactions = [];
 
   function handleRequest(req, res, pathname) {
+    if (pathname === "/__mock/enabled") {
+      if (!localDev) {
+        res.writeHead(404); res.end("Not found");
+        return true;
+      }
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({ enabled: true }));
+      return true;
+    }
+
     if (pathname === "/__mock/sendTransaction" && req.method === "POST") {
       if (!localDev) {
         res.writeHead(404); res.end("Not found (start with --local-dev)");
@@ -197,6 +236,7 @@ function createChainPoller(opts) {
   const intervalMs = opts.intervalMs || 3000;
   const upstream = opts.upstream || EXPLORER_UPSTREAM;
   const upstreamBase = opts.upstreamBase || EXPLORER_UPSTREAM_BASE;
+  const queryField = opts.queryField || "account";
 
   let chainId = null;
   const seenTxIds = new Set();
@@ -225,7 +265,7 @@ function createChainPoller(opts) {
 
     try {
       for (let page = 0; page < MAX_PAGES; page++) {
-        const body = { account: appPubkey, limit: 50 };
+        const body = { [queryField]: appPubkey, limit: 50 };
         if (cursor) body.cursor = cursor;
         const resp = await httpsJson("POST", url, body);
 
@@ -291,6 +331,7 @@ function resolvePath(...candidates) {
 module.exports = {
   EXPLORER_UPSTREAM,
   EXPLORER_UPSTREAM_BASE,
+  loadEnvFile,
   readJson,
   httpsJson,
   handleExplorerProxy,

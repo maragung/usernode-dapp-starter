@@ -25,10 +25,12 @@ COPY server.js ./
 # Shared bridge (copied into examples/ by deploy script)
 COPY usernode-bridge.js ./
 
-# HTML files for all three apps
+# HTML files for all apps
 COPY index.html ./
 COPY cis/usernode_cis.html cis/
 COPY falling-sands/index.html falling-sands/
+COPY last-one-wins/index.html last-one-wins/
+COPY last-one-wins/game-logic.js last-one-wins/
 
 # Falling-sands engine + WASM loader + built WASM package
 COPY falling-sands/engine.js falling-sands/

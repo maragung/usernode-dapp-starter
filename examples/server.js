@@ -2,14 +2,16 @@
 /**
  * Combined examples server.
  *
- * Hosts all three dapp examples from a single process:
+ * Hosts all dapp examples from a single process:
  *   /               — dapp-starter demo (index.html)
  *   /cis            — Collective Intelligence Service
  *   /falling-sands  — Falling Sands (with server-side WASM + WebSocket streaming)
+ *   /last-one-wins  — Last One Wins token game (with server-side payouts)
  *
  * Also provides:
  *   /usernode-bridge.js   — shared bridge
  *   /__mock/*             — mock transaction endpoints (--local-dev)
+ *   /__game/state         — Last One Wins game state API
  *   /explorer-api/*       — explorer proxy
  *   WebSocket             — falling-sands simulation stream
  */
@@ -17,8 +19,11 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { handleExplorerProxy, createMockApi, createChainPoller, resolvePath } = require("./lib/dapp-server");
+const { loadEnvFile, handleExplorerProxy, createMockApi, createChainPoller, httpsJson, resolvePath } = require("./lib/dapp-server");
+
+loadEnvFile();
 const createEngine = require("./falling-sands/engine");
+const createLastOneWins = require("./last-one-wins/game-logic");
 
 // ── CLI flags ────────────────────────────────────────────────────────────────
 const LOCAL_DEV = process.argv.includes("--local-dev");
@@ -32,6 +37,13 @@ const BRIDGE_PATH = resolvePath(path.join(__dirname, "usernode-bridge.js"), path
 const INDEX_HTML = resolvePath(path.join(__dirname, "index.html"), path.join(__dirname, "..", "index.html"));
 const CIS_HTML = path.join(__dirname, "cis", "usernode_cis.html");
 const SANDS_HTML = path.join(__dirname, "falling-sands", "index.html");
+const LASTWIN_HTML = path.join(__dirname, "last-one-wins", "index.html");
+
+// ── Game config (Last One Wins) ──────────────────────────────────────────────
+const LASTWIN_APP_PUBKEY = process.env.APP_PUBKEY || "ut1_lastwin_default_pubkey";
+const LASTWIN_APP_SECRET_KEY = process.env.APP_SECRET_KEY || "";
+const LASTWIN_NODE_RPC_URL = process.env.NODE_RPC_URL || "http://localhost:3000";
+const LASTWIN_TIMER_MS = parseInt(process.env.TIMER_DURATION_MS, 10) || 86400000;
 
 // ── Mock API ─────────────────────────────────────────────────────────────────
 const mockApi = createMockApi({ localDev: LOCAL_DEV });
@@ -43,7 +55,7 @@ const engine = createEngine({ wasmLoaderPath: require.resolve("./falling-sands/w
 setInterval(() => engine.processMockTransactions(mockApi.transactions), 500);
 
 // ── Chain polling for falling-sands ──────────────────────────────────────────
-const poller = createChainPoller({
+const sandsPoller = createChainPoller({
   appPubkey: SANDS_APP_PUBKEY,
   onTransaction(tx) {
     if (!tx.memo) return;
@@ -55,7 +67,25 @@ const poller = createChainPoller({
     } catch (_) {}
   },
 });
-poller.start();
+if (!LOCAL_DEV) sandsPoller.start();
+
+// ── Last One Wins game ──────────────────────────────────────────────────────
+const lastOneWins = createLastOneWins({
+  appPubkey: LASTWIN_APP_PUBKEY,
+  appSecretKey: LASTWIN_APP_SECRET_KEY,
+  nodeRpcUrl: LASTWIN_NODE_RPC_URL,
+  timerDurationMs: LASTWIN_TIMER_MS,
+  localDev: LOCAL_DEV,
+  mockTransactions: LOCAL_DEV ? mockApi.transactions : null,
+});
+lastOneWins.start();
+
+const lastwinPoller = createChainPoller({
+  appPubkey: LASTWIN_APP_PUBKEY,
+  queryField: "recipient",
+  onTransaction: lastOneWins.processTransaction,
+});
+if (!LOCAL_DEV) lastwinPoller.start();
 
 // ── HTTP server ──────────────────────────────────────────────────────────────
 
@@ -80,6 +110,9 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  // Last One Wins game state API
+  if (lastOneWins.handleRequest(req, res, pathname)) return;
+
   // Mock API
   if (mockApi.handleRequest(req, res, pathname)) return;
 
@@ -88,12 +121,14 @@ const server = http.createServer((req, res) => {
 
   // Static routes
   const staticRoutes = {
-    "/":               INDEX_HTML,
-    "/index.html":     INDEX_HTML,
-    "/cis":            CIS_HTML,
-    "/cis/":           CIS_HTML,
-    "/falling-sands":  SANDS_HTML,
-    "/falling-sands/": SANDS_HTML,
+    "/":                 INDEX_HTML,
+    "/index.html":       INDEX_HTML,
+    "/cis":              CIS_HTML,
+    "/cis/":             CIS_HTML,
+    "/falling-sands":    SANDS_HTML,
+    "/falling-sands/":   SANDS_HTML,
+    "/last-one-wins":    LASTWIN_HTML,
+    "/last-one-wins/":   LASTWIN_HTML,
   };
 
   const htmlFile = staticRoutes[pathname];
@@ -120,6 +155,7 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`  /               — dapp-starter demo`);
   console.log(`  /cis            — Collective Intelligence Service`);
   console.log(`  /falling-sands  — Falling Sands (WASM + WebSocket)`);
+  console.log(`  /last-one-wins  — Last One Wins token game`);
   console.log(`  Grid: ${width}x${height}  |  Tick rate: ${tickHz} Hz`);
   console.log(`  Mock API (--local-dev): ${LOCAL_DEV ? "ENABLED" : "disabled"}\n`);
 });

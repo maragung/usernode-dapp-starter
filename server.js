@@ -141,6 +141,14 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  if (pathname === "/__mock/enabled") {
+    if (!ENABLE_MOCK_API) {
+      return send(res, 404, { "content-type": "text/plain" }, "Not Found");
+    }
+    return send(res, 200, { "content-type": "application/json", "cache-control": "no-store" },
+      JSON.stringify({ enabled: true }));
+  }
+
   if (pathname === "/__mock/sendTransaction") {
     if (!ENABLE_MOCK_API) {
       return send(res, 404, { "content-type": "text/plain" }, "Not Found");

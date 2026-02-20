@@ -78,13 +78,13 @@ localStorage.setItem("usernode:mockAddress", "ut1_...your_mock_address...")
 
 If you don’t set that, the bridge generates a random value once and stores it in:
 
-- `localStorage["usernode:mockPubkey"]`
+---
 
 #### dapp mode (loaded inside the Flutter app WebView)
 
 `usernode-bridge.js` will detect the native environment by checking for the WebView channel:
 
-- `window.Usernode.postMessage(...)`
+- `localStorage["usernode:mockPubkey"]`
 
 In this mode:
 
@@ -93,7 +93,7 @@ In this mode:
   - `window.usernode.transactionsBaseUrl = "https://..."`
   - For now, if it’s not set, it **throws an error**.
 
----
+The Flutter app’s dapps screen already maps `localhost` → `10.0.2.2` when needed.
 
 ## Troubleshooting
 
@@ -104,5 +104,5 @@ use:
 
 - **`http://10.0.2.2:8000`**
 
-The Flutter app’s dapps screen already maps `localhost` → `10.0.2.2` when needed.
+- `window.Usernode.postMessage(...)`
 

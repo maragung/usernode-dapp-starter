@@ -4,6 +4,11 @@
  * Included by dapps to access Usernode-provided APIs when running inside the
  * mobile app WebView. When running in a normal browser, it provides stubbed
  * implementations so local development still works.
+ *
+ * Mock-mode detection: when the server runs with --local-dev, it exposes
+ * /__mock/enabled. If that endpoint responds 200, ALL transaction calls go
+ * through mock endpoints — even inside the Flutter WebView. This lets
+ * developers test dapps on-device without hitting the real chain.
  */
 
 (function () {
@@ -52,10 +57,6 @@
 
   function extractTxId(sendResult) {
     if (!sendResult) return null;
-    // Common shapes:
-    // - { tx: { id } } (local mock)
-    // - { txid } / { txId } / { hash } / { tx_hash }
-    // - { tx: { txid/hash/... } }
     const candidates = [];
     if (typeof sendResult === "string") candidates.push(sendResult);
     if (typeof sendResult === "object") {
@@ -97,7 +98,6 @@
     ];
     for (const v of candidates) {
       if (typeof v === "number" && Number.isFinite(v)) {
-        // Heuristic: seconds vs ms
         return v < 10_000_000_000 ? v * 1000 : v;
       }
       if (typeof v === "string" && v.trim()) {
@@ -134,18 +134,14 @@
       if (txIdCandidates.includes(expected.txId)) return true;
     }
 
-    // Avoid accidentally matching an older tx (e.g. duplicate memo).
-    // Only enforce this when we can parse a timestamp from the tx object.
     if (typeof expected.minCreatedAtMs === "number") {
       const txTime = extractTxTimestampMs(tx);
       if (typeof txTime === "number") {
-        // Allow slight clock skew / server ordering delay.
         const SKEW_MS = 5_000;
         if (txTime < expected.minCreatedAtMs - SKEW_MS) return false;
       }
     }
 
-    // Fallback: match by memo + basic fields (memo is commonly unique per send).
     if (expected.memo != null) {
       const memo = tx.memo == null ? null : String(tx.memo);
       if (memo !== expected.memo) return false;
@@ -230,17 +226,39 @@
     const key = "usernode:mockPubkey";
     let v = window.localStorage.getItem(key);
     if (!v) {
-      // Not a real chain key; just a stable-per-browser-session mock identifier.
       v = `mockpk_${randomHex(16)}`;
       window.localStorage.setItem(key, v);
     }
     return v;
   }
 
+  // ── Mock-mode detection ────────────────────────────────────────────────
+  // Probes /__mock/enabled once on first use; caches the result. When the
+  // server runs --local-dev, this returns true and ALL send/get calls route
+  // to mock endpoints — even inside the Flutter WebView.
+  let _mockEnabledResult = null;
+
+  async function isMockEnabled() {
+    if (_mockEnabledResult !== null) return _mockEnabledResult;
+    try {
+      const resp = await fetch("/__mock/enabled", { method: "GET" });
+      _mockEnabledResult = resp.ok;
+    } catch (_) {
+      _mockEnabledResult = false;
+    }
+    if (_mockEnabledResult) {
+      console.log("[usernode-bridge] mock API detected — using local-dev endpoints");
+    }
+    return _mockEnabledResult;
+  }
+
+  window.usernode.isMockEnabled = isMockEnabled;
+
   /**
-   * Stubbed in-browser implementation.
-   * - You can set a mock address via localStorage:
-   *     localStorage.setItem("usernode:mockAddress", "ut1...");
+   * getNodeAddress — returns the user's public key.
+   * In the WebView: calls native bridge. In browser: returns a mock key.
+   * Note: this always uses native when available (even in mock mode) so
+   * that the real user address appears in mock transactions.
    */
   if (typeof window.getNodeAddress !== "function") {
     if (window.usernode.isNative) {
@@ -258,137 +276,111 @@
   }
 
   /**
-   * Stubbed transaction sender for local browser development.
-   * In the mobile app WebView, the native bridge overrides this with a real
-   * implementation.
+   * sendTransaction — sends a transaction via mock or native path.
+   *
+   * Priority: mock API (if server is --local-dev) > native bridge > mock fallback.
+   * This ensures on-device testing uses mock endpoints when available.
    */
   if (typeof window.sendTransaction !== "function") {
-    if (window.usernode.isNative) {
-      // dapp mode: go through the WebView native bridge.
-      window.sendTransaction = async function sendTransaction(
-        destination_pubkey,
-        amount,
-        memo,
-        opts
-      ) {
-        const startedAt = Date.now();
+    async function mockSendTransaction(destination_pubkey, amount, memo, opts) {
+      const startedAt = Date.now();
+      const resp = await fetch("/__mock/sendTransaction", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          from_pubkey: await window.getNodeAddress(),
+          destination_pubkey,
+          amount,
+          memo,
+        }),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        if (resp.status === 404) {
+          throw new Error(
+            "Mock API not enabled. Start server with `node server.js --local-dev`."
+          );
+        }
+        throw new Error(
+          `Mock sendTransaction failed (${resp.status}): ${text}`
+        );
+      }
+      const sendResult = await resp.json();
+      const sendFailed = sendResult && (sendResult.error || sendResult.queued === false);
+      const shouldWait =
+        !sendFailed && (!opts || opts.waitForInclusion == null ? true : !!opts.waitForInclusion);
+      if (shouldWait) {
         const from_pubkey = await window
           .getNodeAddress()
           .then((v) => (v == null ? null : String(v).trim()))
           .catch(() => null);
-        const sendResult = await callNative("sendTransaction", {
-          destination_pubkey,
-          amount,
-          memo,
-        });
-        const sendFailed = sendResult && (sendResult.error || sendResult.queued === false);
-        const shouldWait =
-          !sendFailed && (!opts || opts.waitForInclusion == null ? true : !!opts.waitForInclusion);
-        if (shouldWait) {
-          const txId = extractTxId(sendResult);
-          await waitForTransactionVisible(
-            {
-              txId,
-              minCreatedAtMs: startedAt,
-              memo: memo == null ? null : String(memo),
-              destination_pubkey:
-                destination_pubkey == null ? null : String(destination_pubkey),
-              from_pubkey: from_pubkey ? from_pubkey : null,
-              amount,
-            },
-            opts
-          );
-        }
-        return sendResult;
-      };
-    } else {
-      // local dev mode: go through server.js mock endpoints (requires --local-dev flag).
-      window.sendTransaction = async function sendTransaction(
+        const txId = extractTxId(sendResult);
+        await waitForTransactionVisible(
+          {
+            txId,
+            minCreatedAtMs: startedAt,
+            memo: memo == null ? null : String(memo),
+            destination_pubkey:
+              destination_pubkey == null ? null : String(destination_pubkey),
+            from_pubkey: from_pubkey ? from_pubkey : null,
+            amount,
+          },
+          opts
+        );
+      }
+      return sendResult;
+    }
+
+    async function nativeSendTransaction(destination_pubkey, amount, memo, opts) {
+      const startedAt = Date.now();
+      const from_pubkey = await window
+        .getNodeAddress()
+        .then((v) => (v == null ? null : String(v).trim()))
+        .catch(() => null);
+      const sendResult = await callNative("sendTransaction", {
         destination_pubkey,
         amount,
         memo,
-        opts
-      ) {
-        const startedAt = Date.now();
-        const resp = await fetch("/__mock/sendTransaction", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            from_pubkey: await window.getNodeAddress(),
-            destination_pubkey,
+      });
+      const sendFailed = sendResult && (sendResult.error || sendResult.queued === false);
+      const shouldWait =
+        !sendFailed && (!opts || opts.waitForInclusion == null ? true : !!opts.waitForInclusion);
+      if (shouldWait) {
+        const txId = extractTxId(sendResult);
+        await waitForTransactionVisible(
+          {
+            txId,
+            minCreatedAtMs: startedAt,
+            memo: memo == null ? null : String(memo),
+            destination_pubkey:
+              destination_pubkey == null ? null : String(destination_pubkey),
+            from_pubkey: from_pubkey ? from_pubkey : null,
             amount,
-            memo,
-          }),
-        });
-
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => "");
-          if (resp.status === 404) {
-            throw new Error(
-              "Mock API not enabled. Start server with `node server.js --local-dev`."
-            );
-          }
-          throw new Error(
-            `Mock sendTransaction failed (${resp.status}): ${text}`
-          );
-        }
-        const sendResult = await resp.json();
-        const sendFailed = sendResult && (sendResult.error || sendResult.queued === false);
-        const shouldWait =
-          !sendFailed && (!opts || opts.waitForInclusion == null ? true : !!opts.waitForInclusion);
-        if (shouldWait) {
-          const from_pubkey = await window
-            .getNodeAddress()
-            .then((v) => (v == null ? null : String(v).trim()))
-            .catch(() => null);
-          const txId = extractTxId(sendResult);
-          await waitForTransactionVisible(
-            {
-              txId,
-              minCreatedAtMs: startedAt,
-              memo: memo == null ? null : String(memo),
-              destination_pubkey:
-                destination_pubkey == null ? null : String(destination_pubkey),
-              from_pubkey: from_pubkey ? from_pubkey : null,
-              amount,
-            },
-            opts
-          );
-        }
-        return sendResult;
-      };
+          },
+          opts
+        );
+      }
+      return sendResult;
     }
+
+    window.sendTransaction = async function sendTransaction(
+      destination_pubkey, amount, memo, opts
+    ) {
+      const useMock = await isMockEnabled();
+      if (useMock) return mockSendTransaction(destination_pubkey, amount, memo, opts);
+      if (window.usernode.isNative) return nativeSendTransaction(destination_pubkey, amount, memo, opts);
+      return mockSendTransaction(destination_pubkey, amount, memo, opts);
+    };
   }
 
   /**
    * getTransactions(filterOptions)
    *
-   * - Native/WebView: calls out to a server URL you’ll configure shortly via:
-   *     window.usernode.transactionsBaseUrl = "https://..."
-   *
-   * - Local browser dev: calls server.js mock endpoint (requires --mock-api).
+   * Priority: mock API (if server is --local-dev) > native/explorer > mock fallback.
    */
   if (typeof window.getTransactions !== "function") {
-    window.getTransactions = async function getTransactions(filterOptions) {
-      if (window.usernode.isNative) {
-        const base = window.usernode.transactionsBaseUrl;
-        if (!base) {
-          throw new Error(
-            "transactionsBaseUrl not configured (set window.usernode.transactionsBaseUrl)"
-          );
-        }
-        const resp = await fetch(`${base}/transactions`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(filterOptions || {}),
-        });
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => "");
-          throw new Error(`getTransactions failed (${resp.status}): ${text}`);
-        }
-        return await resp.json();
-      }
-
+    async function mockGetTransactions(filterOptions) {
       const ownerPubkey = (filterOptions && filterOptions.account)
         ? filterOptions.account
         : await window.getNodeAddress();
@@ -411,7 +403,32 @@
         throw new Error(`Mock getTransactions failed (${resp.status}): ${text}`);
       }
       return await resp.json();
+    }
+
+    async function nativeGetTransactions(filterOptions) {
+      const base = window.usernode.transactionsBaseUrl;
+      if (!base) {
+        throw new Error(
+          "transactionsBaseUrl not configured (set window.usernode.transactionsBaseUrl)"
+        );
+      }
+      const resp = await fetch(`${base}/transactions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(filterOptions || {}),
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(`getTransactions failed (${resp.status}): ${text}`);
+      }
+      return await resp.json();
+    }
+
+    window.getTransactions = async function getTransactions(filterOptions) {
+      const useMock = await isMockEnabled();
+      if (useMock) return mockGetTransactions(filterOptions);
+      if (window.usernode.isNative) return nativeGetTransactions(filterOptions);
+      return mockGetTransactions(filterOptions);
     };
   }
 })();
-

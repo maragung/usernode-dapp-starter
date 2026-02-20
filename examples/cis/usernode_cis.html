@@ -1942,13 +1942,20 @@
           myUsername = deriveDefaultUsername(me);
           setUsernameUi(myUsername);
 
-          // Discover chain ID so explorer API and bridge getTransactions work
-          try {
-            chainId = await discoverChainId();
-            window.usernode = window.usernode || {};
-            window.usernode.transactionsBaseUrl = `${EXPLORER_BASE}/${chainId}`;
-          } catch (e) {
-            console.warn("Could not discover chain ID:", e);
+          // Discover chain ID (skip in mock/local-dev mode so reads go
+          // through the bridge's mock endpoints instead of the explorer)
+          const mockEnabled = window.usernode && typeof window.usernode.isMockEnabled === "function"
+            ? await window.usernode.isMockEnabled()
+            : false;
+
+          if (!mockEnabled) {
+            try {
+              chainId = await discoverChainId();
+              window.usernode = window.usernode || {};
+              window.usernode.transactionsBaseUrl = `${EXPLORER_BASE}/${chainId}`;
+            } catch (e) {
+              console.warn("Could not discover chain ID:", e);
+            }
           }
 
           // Check if the user already has a username on-chain

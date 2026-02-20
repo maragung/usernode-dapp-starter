@@ -60,7 +60,7 @@ Fetches transactions. In local dev, returns from the in-memory mock store. In da
 | Transaction ID | `id` | `tx_id` |
 | Sender | `from_pubkey` | `source` |
 | Recipient | `destination_pubkey` | `destination` |
-| Amount | `amount` | `amount` |
+| Amount | `amount` | `amount` (see caveat below) |
 | Memo | `memo` | `memo` |
 | Timestamp | `created_at` (ISO string) | `timestamp_ms` (epoch ms) |
 | Block height | — | `block_height` |
@@ -68,6 +68,16 @@ Fetches transactions. In local dev, returns from the in-memory mock store. In da
 | Type | — | `tx_type` (`transfer` / `reward` / `genesis`) |
 
 Because of this, your dapp should always use the `normalizeTx` helper from Section 3 to handle both shapes uniformly.
+
+**Explorer `amount` caveat**: The explorer API returns different values for `amount` depending on which query filter you use:
+
+| Query filter | `amount` meaning |
+|---|---|
+| `recipient: X` | What X actually received (`recipient_amount`) |
+| `sender: X` | What X actually sent, excluding change (`sender_amount`) |
+| `account: X` | Sum of **all** outputs, including change back to sender (`total_output`) |
+
+This is a UTXO model artifact. When you send 5 tokens from a UTXO worth 6, the transaction has two outputs: 5 to recipient + 1 change to sender = 6 `total_output`. If your dapp tracks amounts received (e.g., a pot or balance), **always query with `recipient`** — not `account` — to get correct amounts. See Section 12 for the `queryField` option.
 
 ---
 
@@ -217,10 +227,12 @@ function parseAppTx(rawTx) {
 
 ## 4. Transaction Types Are Memo-Only
 
-All transaction type discrimination is done via the `type` field in the JSON memo — **not** via the `amount` field. Use `amount = 1` for all transactions. The memo is the single source of truth for what a transaction means.
+All transaction type discrimination is done via the `type` field in the JSON memo — **not** via the `amount` field. The memo is the single source of truth for what a transaction means.
+
+For **data-only dapps** (surveys, chat, identity), use `amount = 1` for all transactions — the amount is irrelevant and just serves as a carrier for the memo:
 
 ```js
-// Every sendTransaction call uses amount = 1:
+// Data-only: amount = 1, payload lives in the memo
 await sendTransaction(APP_PUBKEY, 1, JSON.stringify({
   app: "myapp",
   type: "post_message",
@@ -228,6 +240,19 @@ await sendTransaction(APP_PUBKEY, 1, JSON.stringify({
   text: "Hello world!",
 }), TX_SEND_OPTS);
 ```
+
+For **token-based dapps** (games, tipping, bounties), the `amount` field carries real value. Let the user choose the amount via an input field:
+
+```js
+// Token game: amount is user-specified
+const amount = parseInt(amountInput.value, 10);
+await sendTransaction(APP_PUBKEY, amount, JSON.stringify({
+  app: "mygame",
+  type: "entry",
+}), TX_SEND_OPTS);
+```
+
+> **Important**: When your dapp tracks token amounts from the chain, always query with `recipient` (not `account`) to get the correct amount received — see the `amount` caveat in Section 2.
 
 ### Memo Size Limit
 
@@ -746,7 +771,70 @@ Key transaction types in the CIS example:
 
 ---
 
-## 10. Explorer API Proxy
+## 10. Last One Wins — Token Game Pattern
+
+The Last One Wins example (`examples/last-one-wins/`) implements a complete token-based game with server-side payouts. Players send tokens to the game address; if no one sends for a configurable duration (default 24h), the last sender wins the accumulated pot.
+
+### Architecture
+
+Unlike CIS (pure client-side state), Last One Wins has a **server component** that:
+- Polls the chain for new entry and `set_username` transactions and rebuilds game state
+- Tracks usernames (latest `set_username` per sender wins) and exposes them alongside game state
+- Tracks the countdown timer and triggers automated payouts via RPC
+- Exposes game state to the client via `GET /__game/state`
+
+The client is a thin UI that polls `/__game/state` every few seconds and renders the countdown, pot balance, and recent activity. The client sends entries via the standard `sendTransaction` bridge (through the Flutter WebView).
+
+### Transaction Types
+
+| `type` | Direction | Payload | Description |
+|--------|-----------|---------|-------------|
+| `entry` | User → app | `{ app: "lastwin", type: "entry" }` | Player sends tokens (amount is variable) |
+| `payout` | App → winner | `{ app: "lastwin", type: "payout", round: N, winner: "ut1..." }` | Server sends pot to winner |
+| `set_username` | User → app | `{ app: "lastwin", type: "set_username", username: "alice_a1b2c3" }` | Set display name (see Section 8) |
+
+### Game Logic (`game-logic.js`)
+
+The game logic is a self-contained module (`createLastOneWins(opts)`) shared between the standalone server and the combined examples server. Key patterns:
+
+- **Transaction processing**: `processTransaction(rawTx)` handles both entries (to app) and payouts (from app), with dedup by txId
+- **Timer**: Configurable via `TIMER_DURATION_MS` env var (mock mode uses 2 minutes)
+- **Payout flow**: Server configures signer → sends payout → if single-UTXO fails, consolidates → retries → on success, injects synthetic transaction to advance round immediately
+- **Username tracking**: `processTransaction` also handles `set_username` memos, building a server-side `usernames` Map (latest per sender wins). The client resolves pubkeys to display names from this map.
+- **State response**: `/__game/state` returns `{ roundNumber, potBalance, lastSender, timeRemainingMs, entries, pastRounds, usernames, ... }` — where `usernames` is a `{ pubkey: displayName }` object
+
+### Chain Poller: Use `recipient` for Correct Amounts
+
+The Last One Wins poller uses `queryField: "recipient"` to ensure the explorer returns the actual amount received by the game address, not `total_output` (which includes change — see Section 2 caveat):
+
+```js
+const poller = createChainPoller({
+  appPubkey: APP_PUBKEY,
+  queryField: "recipient",
+  onTransaction: game.processTransaction,
+});
+```
+
+Since `recipient` queries won't show outgoing payouts (from the app), the game injects a synthetic transaction via `processTransaction` immediately after a successful RPC payout, advancing the round without waiting for the chain poller.
+
+### Client Pattern: Server-Driven State
+
+Instead of rebuilding state from transactions on the client (the pattern for simpler dapps), Last One Wins delegates state management to the server. The client just polls and renders:
+
+```js
+async function pollGameState() {
+  const resp = await fetch("/__game/state");
+  gameData = await resp.json();
+  render();
+}
+setInterval(pollGameState, 4000);
+```
+
+This pattern is useful when game logic requires timers, automated actions, or access to secrets (like the payout signer key).
+
+---
+
+## 11. Explorer API Proxy
 
 Every server in the project (root `server.js` and each sub-app server) must proxy `/explorer-api/*` requests to the upstream block explorer. This is needed because clients running in a WebView or from a different origin cannot call the explorer directly due to CORS.
 
@@ -788,27 +876,52 @@ async function queryTransactions(body) {
 
 > **Every new sub-app server must include this proxy.** Copy the proxy handler from `server.js` or `examples/falling-sands/server.js`.
 
+> **Important**: The explorer proxy works even in `--local-dev` mode, because it forwards to the real upstream explorer. This means `discoverChainId()` will succeed and direct `explorerFetch` calls will return real chain data — **bypassing mock endpoints entirely**. Always check `isMockEnabled()` before calling `discoverChainId()` so reads route through the bridge's mock endpoints in local dev. See Section 17 for the pattern.
+
 ---
 
-## 11. Server-Side Chain Polling
+## 12. Server-Side Chain Polling
 
 For dapps with a backend server that needs to react to on-chain transactions (e.g., the falling-sands simulation server applies drawing strokes from real transactions), implement server-side chain polling.
 
 ### Pattern Overview
 
 1. **Discover the chain ID** — `GET /active_chain` → `data.chain_id`
-2. **Poll transactions** — `POST /{chainId}/transactions` with `{ account: APP_PUBKEY }`
+2. **Poll transactions** — `POST /{chainId}/transactions` with the appropriate filter
 3. **Deduplicate** — track seen transaction IDs in a `Set`
 4. **Apply** — parse memo, apply to your app state
 
 ### Key Details
 
-- **Filter field**: use `account: APP_PUBKEY` (not `receiver` — the explorer API uses `account`)
+- **Filter field**: choose based on what your app needs (see Section 2 `amount` caveat):
+  - `account: APP_PUBKEY` — both sent and received, but `amount` = `total_output` (includes change)
+  - `recipient: APP_PUBKEY` — only received, `amount` = what the app actually received (correct for pots/balances)
+  - `sender: APP_PUBKEY` — only sent, `amount` = what the app sent
 - **Transaction ID field**: the explorer API returns `tx_id` (see normalization in Section 3)
 - **Cursor-based pagination**: the API response includes `next_cursor` (opaque string or null) and `has_more` (boolean); loop up to N pages to catch all relevant transactions past reward transactions
 - **`APP_PUBKEY` must match** between server and client
 
-### Minimal Implementation
+### Using `createChainPoller`
+
+The shared `dapp-server.js` library provides a ready-made chain poller:
+
+```js
+const { createChainPoller } = require("./lib/dapp-server");
+
+const poller = createChainPoller({
+  appPubkey: APP_PUBKEY,
+  queryField: "recipient",   // "account" (default), "recipient", or "sender"
+  onTransaction: (tx) => { /* process each new tx */ },
+  intervalMs: 3000,           // poll interval (default 3000)
+});
+poller.start();
+```
+
+The `queryField` option controls which explorer filter is used. Use `"recipient"` when your dapp needs accurate received amounts (token games, pots, balances). Use `"account"` (the default) for general-purpose polling where both directions are needed and amounts are irrelevant.
+
+### Minimal Manual Implementation
+
+If you need to implement polling without `createChainPoller`:
 
 ```js
 const CHAIN_POLL_INTERVAL_MS = 3000;
@@ -828,7 +941,7 @@ async function pollChainTransactions() {
   const MAX_PAGES = 10;
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    const body = { account: APP_PUBKEY, limit: 50 };
+    const body = { recipient: APP_PUBKEY, limit: 50 };
     if (cursor) body.cursor = cursor;
     const data = await httpsJson("POST", `${baseUrl}/transactions`, body);
     const items = data.items || [];
@@ -891,7 +1004,81 @@ function httpsJson(method, urlStr, body) {
 
 ---
 
-## 12. Generating App Public Keys
+## 13. Server-Side Payouts via RPC
+
+Some dapps need the server to send transactions programmatically (e.g., automated payouts, prize distribution). This is done via the node's RPC wallet endpoints.
+
+### How It Works
+
+1. **Configure an in-process signer** — `POST /wallet/signer` with the app's secret key. This tells the node to sign transactions for that address.
+2. **Send a transaction** — `POST /wallet/send` with sender, recipient, amount, fee, and memo. The node selects UTXOs, builds the transaction, signs it, and submits it to the mempool.
+
+### RPC Endpoints
+
+| Endpoint | Method | Body | Description |
+|---|---|---|---|
+| `/wallet/signer` | POST | `{ "secret_key": "..." }` | Register an in-process signer for the app address |
+| `/wallet/send` | POST | `{ "from_pk_hash": "...", "amount": N, "to_pk_hash": "...", "fee": 0, "memo": "..." }` | Send a wallet transfer |
+
+### Example: Payout Flow
+
+```js
+async function configureSigner(nodeRpcUrl, secretKey) {
+  const resp = await httpJson("POST", `${nodeRpcUrl}/wallet/signer`, {
+    secret_key: secretKey,
+  });
+  return resp && resp.ok;
+}
+
+async function sendPayout(nodeRpcUrl, fromPubkey, toPubkey, amount, memo) {
+  const resp = await httpJson("POST", `${nodeRpcUrl}/wallet/send`, {
+    from_pk_hash: fromPubkey,
+    amount,
+    to_pk_hash: toPubkey,
+    fee: 0,
+    memo,
+  });
+  return resp && resp.queued;
+}
+```
+
+### UTXO Constraints
+
+The current wallet RPC only supports **single-input** transactions. If the app's funds are spread across many small UTXOs, a payout may fail because no single UTXO covers the full amount. The workaround is a **consolidation self-send** — send the pot balance to yourself first, which merges UTXOs into a single output:
+
+```js
+async function consolidateUtxos(nodeRpcUrl, appPubkey, amount) {
+  await httpJson("POST", `${nodeRpcUrl}/wallet/send`, {
+    from_pk_hash: appPubkey,
+    amount,
+    to_pk_hash: appPubkey,
+    fee: 0,
+    memo: JSON.stringify({ app: "myapp", type: "consolidate" }),
+  });
+}
+```
+
+After consolidation lands on-chain (wait ~10s), retry the payout.
+
+### Fees
+
+Fees are currently **always zero** on the chain. The wallet RPC rejects non-zero fees. Always pass `fee: 0`.
+
+### Environment Variables
+
+Server-side payouts require secrets that must not be committed to the repo. Store them in `.env`:
+
+```
+APP_PUBKEY=ut1...
+APP_SECRET_KEY=...
+NODE_RPC_URL=https://alpha2.usernodelabs.org
+```
+
+See Section 14 for how to generate these and load them.
+
+---
+
+## 14. Generating App Public Keys & `.env` Files
 
 Each dapp should have its **own unique address** — don't reuse genesis block keys or share addresses between apps. Use the included `scripts/generate-keypair.js` to generate them.
 
@@ -906,6 +1093,12 @@ node scripts/generate-keypair.js --count 3 --json
 
 # Specify a custom node URL or CLI path:
 node scripts/generate-keypair.js --node-url http://localhost:3000 --cli-path /path/to/usernode
+
+# Generate a keypair and write APP_PUBKEY, APP_SECRET_KEY, NODE_RPC_URL to .env:
+node scripts/generate-keypair.js --env
+
+# Write to a custom .env path:
+node scripts/generate-keypair.js --env path/to/.env
 ```
 
 ### How It Works
@@ -928,15 +1121,37 @@ const APP_PUBKEY = "ut1zvhmxlhmv95cgzaph6cpv0rrcrn29gr4xkdj9fuykc6648hmvgksmkfua
 
 > **Keep the `secret_key` safe** — it controls funds sent to the address.
 
+### `.env` File Convention
+
+Dapps with server-side logic (payouts, chain polling with secrets) store configuration in a `.env` file at the repo root. The `--env` flag on `generate-keypair.js` creates or appends to this file automatically. The standard variables are:
+
+```
+APP_PUBKEY=ut1...
+APP_SECRET_KEY=...
+NODE_RPC_URL=https://alpha2.usernodelabs.org
+TIMER_DURATION_MS=86400000
+```
+
+Load the `.env` in your server with:
+
+```js
+const { loadEnvFile } = require("./lib/dapp-server");
+loadEnvFile(); // reads .env from repo root into process.env
+```
+
+> **Never commit `.env`** — it contains secrets. The repo includes `.env` in `.gitignore`.
+
 ---
 
-## 13. Combined Examples Server
+## 15. Combined Examples Server
 
 All example dapps are deployed together from a single `examples/server.js` and a single Docker container. This combined server hosts:
 
 - `/` — dapp-starter demo (`index.html`)
 - `/cis` — Collective Intelligence Service (`cis/usernode_cis.html`)
 - `/falling-sands` — Falling Sands (`falling-sands/index.html`)
+- `/last-one-wins` — Last One Wins token game (`last-one-wins/index.html`)
+- `/__game/state` — Last One Wins game state API (JSON)
 - `/usernode-bridge.js` — shared bridge
 - `/__mock/*` — mock transaction endpoints (when `--local-dev`)
 - `/explorer-api/*` — explorer proxy
@@ -984,7 +1199,7 @@ This is useful for developing a single example in isolation. The combined server
 
 When a dapp example has its own backend server, it must include:
 
-1. **Explorer API proxy** — same `/explorer-api/*` proxy (see Section 10)
+1. **Explorer API proxy** — same `/explorer-api/*` proxy (see Section 11)
 2. **`APP_PUBKEY`** — matching the client's value
 3. **Flexible bridge path** — resolve `usernode-bridge.js` locally first, then fall back to root:
 
@@ -997,11 +1212,11 @@ const BRIDGE_PATH = (() => {
 ```
 
 4. **Mock transaction store** — same `/__mock/*` endpoints as the root server for local-dev mode
-5. **Chain polling** — if the server reacts to on-chain data, implement the pattern from Section 11
+5. **Chain polling** — if the server reacts to on-chain data, implement the pattern from Section 12
 
 ---
 
-## 14. File Organization
+## 16. File Organization
 
 ```
 ├── index.html                     # Main dapp page (replace with your dapp)
@@ -1009,13 +1224,14 @@ const BRIDGE_PATH = (() => {
 ├── server.js                      # Root dev server + mock API + explorer proxy (template)
 ├── AGENTS.md                      # This file
 ├── README.md
+├── .env                           # App secrets (APP_PUBKEY, APP_SECRET_KEY, etc.) — NOT committed
 ├── Dockerfile                     # Production container (root template server)
 ├── docker-compose.yml             # Root template service (not used for showcase deploy)
 ├── docker-compose.local.yml       # Local override: port mapping
 ├── Makefile                       # make up / make down / make logs
 ├── .gitmodules                    # Git submodule config (falling-sands/sandspiel)
 ├── scripts/
-│   └── generate-keypair.js        # Generate unique APP_PUBKEY addresses
+│   └── generate-keypair.js        # Generate unique APP_PUBKEY addresses (supports --env)
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml             # GitHub Actions: build + deploy to dapps.usernodelabs.org
@@ -1026,10 +1242,14 @@ const BRIDGE_PATH = (() => {
     ├── docker-compose.local.yml   # Local override: port mapping
     ├── package.json               # Dependencies (ws)
     ├── lib/
-    │   └── dapp-server.js         # Shared server utilities (mock API, explorer proxy)
+    │   └── dapp-server.js         # Shared server utilities (mock API, explorer proxy, chain poller)
     ├── cis/
     │   ├── usernode_cis.html      # Reference: Collective Intelligence Service
     │   └── README.md
+    ├── last-one-wins/
+    │   ├── index.html             # Client UI (token game)
+    │   ├── game-logic.js          # Shared game state, tx processing, payout logic
+    │   └── server.js              # Standalone server (for independent local dev)
     └── falling-sands/
         ├── server.js              # Standalone server (for independent local dev)
         ├── index.html             # Client UI
@@ -1057,7 +1277,7 @@ All static files under the repo root are automatically served by `server.js`.
 
 ---
 
-## 15. Local Development
+## 17. Local Development
 
 ```bash
 # Start with mock APIs enabled:
@@ -1071,7 +1291,38 @@ The mock server:
 - Stores transactions **in memory** (reset on restart).
 - Adds a **5-second delay** before recording sent transactions (simulates network latency).
 - Returns all transactions where the sender or recipient matches the queried pubkey.
+- Exposes `/__mock/enabled` — the bridge probes this once on first use to auto-detect mock mode.
 - Mock endpoints (`/__mock/*`) return **404** when `--local-dev` is not enabled, so code that tries mock first is safe in production.
+
+### Mock Mode in the Flutter WebView
+
+When the server runs `--local-dev`, the bridge **automatically detects** mock mode by probing `GET /__mock/enabled`. If it responds 200, all `sendTransaction` and `getTransactions` calls route to mock endpoints — **even inside the Flutter WebView**. This means developers can test dapps on-device without sending real transactions.
+
+- `getNodeAddress` still uses the native bridge when available (so the real user address appears in mock transactions).
+- `sendTransaction` and `getTransactions` switch to `/__mock/*` endpoints.
+- In production (no `--local-dev`), `/__mock/enabled` returns 404, so the bridge uses native/explorer paths as normal.
+- The probe result is cached for the lifetime of the page — no repeated network calls.
+- The bridge exposes `window.usernode.isMockEnabled()` (async, cached) so HTML pages can check mock mode.
+
+**Important — skip `discoverChainId()` in mock mode**: Many dapps call `discoverChainId()` to set up direct explorer API reads (via `explorerFetch`). Because the explorer proxy works even in `--local-dev`, `chainId` will resolve successfully, and reads will bypass the bridge entirely — fetching real chain data instead of mock data. To prevent this, **always check `isMockEnabled()` before `discoverChainId()`** and skip it when mock is enabled:
+
+```js
+const mockEnabled = window.usernode && typeof window.usernode.isMockEnabled === "function"
+  ? await window.usernode.isMockEnabled()
+  : false;
+
+if (!mockEnabled) {
+  try {
+    chainId = await discoverChainId();
+    window.usernode = window.usernode || {};
+    window.usernode.transactionsBaseUrl = `${EXPLORER_BASE}/${chainId}`;
+  } catch (e) {
+    console.warn("Could not discover chain ID:", e);
+  }
+}
+```
+
+When `chainId` is null, existing fallback code (e.g., `window.getTransactions` via the bridge) routes through mock endpoints automatically.
 
 ### Fetching Transactions in Local Dev
 
@@ -1116,7 +1367,7 @@ localStorage.setItem("myapp:app_pubkey", "ut1_my_custom_pubkey");
 
 ---
 
-## 16. Docker Deployment
+## 18. Docker Deployment
 
 ### Production (Combined Examples Server)
 
@@ -1165,7 +1416,7 @@ make down    # Stop and remove
 
 ---
 
-## 17. Checklist for Building a New Dapp
+## 19. Checklist for Building a New Dapp
 
 This is a starting-point checklist based on the patterns above. Not every item applies to every app — adapt based on what the user wants to build.
 
@@ -1174,6 +1425,7 @@ This is a starting-point checklist based on the patterns above. Not every item a
 - [ ] Include `<script src="/usernode-bridge.js"></script>` in your HTML
 - [ ] Define `APP_PUBKEY` constant (same value in client and server if applicable)
 - [ ] Define memo schema: `{ app, type, ...payload }`
+- [ ] Check `isMockEnabled()` before `discoverChainId()` / setting `transactionsBaseUrl` (see Section 17)
 
 **Data layer:**
 - [ ] Write a `parseAppTx(rawTx)` helper to normalize + filter transactions (include `tx_id` in ID extraction)
@@ -1194,10 +1446,20 @@ This is a starting-point checklist based on the patterns above. Not every item a
 **Server (if your app has its own backend):**
 - [ ] Include the explorer API proxy (`/explorer-api/*`)
 - [ ] Implement chain polling with dedup if the server reacts to on-chain data
+- [ ] Use `queryField: "recipient"` in chain poller if your app tracks received amounts (pots, balances)
 - [ ] Use flexible bridge path resolution for `usernode-bridge.js`
 - [ ] Add routes and logic to `examples/server.js` (combined deployment)
 - [ ] Optionally create a standalone `server.js` + `Dockerfile` + `docker-compose.yml` in the app directory for independent local dev
+- [ ] Call `loadEnvFile()` at the top of your server to load `.env` secrets
+
+**Server-side payouts (if your app sends transactions programmatically):**
+- [ ] Generate keypair with `node scripts/generate-keypair.js --env` to create `.env`
+- [ ] Configure signer via `POST /wallet/signer` with `APP_SECRET_KEY` before sending
+- [ ] Send payouts via `POST /wallet/send` with `fee: 0`
+- [ ] Handle single-UTXO constraint: if payout fails, consolidate UTXOs and retry
+- [ ] After successful RPC payout, inject synthetic transaction to update game state immediately
 
 **Testing:**
 - [ ] Test with `node server.js --local-dev` (root template server)
+- [ ] Verify mock mode works: sends and reads use `/__mock/*` endpoints, not the real explorer
 - [ ] Test combined server: `cd examples && cp ../usernode-bridge.js . && cp ../index.html . && docker compose -f docker-compose.yml -f docker-compose.local.yml up --build`

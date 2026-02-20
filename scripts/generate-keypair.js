@@ -13,6 +13,9 @@
  *   --node-url URL   Node RPC base URL (default: http://localhost:3000)
  *   --count N        Number of keypairs to generate (default: 1)
  *   --json           Output as JSON (for scripting)
+ *   --env [PATH]     Write APP_PUBKEY, APP_SECRET_KEY, NODE_RPC_URL to a .env
+ *                    file (default: .env in repo root). Creates the file if it
+ *                    doesn't exist; appends missing vars if it does.
  *   --cli-path PATH  Path to the usernode CLI binary
  */
 
@@ -21,6 +24,7 @@ const path = require("path");
 const fs = require("fs");
 
 const DEFAULT_NODE_URL = "http://localhost:3000";
+const REPO_ROOT = path.resolve(__dirname, "..");
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -28,6 +32,7 @@ function parseArgs() {
   let count = 1;
   let json = false;
   let cliPath = null;
+  let envFile = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--node-url" && args[i + 1]) nodeUrl = args[++i];
@@ -39,6 +44,14 @@ function parseArgs() {
       }
     }
     else if (args[i] === "--json") json = true;
+    else if (args[i] === "--env") {
+      const next = args[i + 1];
+      if (next && !next.startsWith("--")) {
+        envFile = path.resolve(args[++i]);
+      } else {
+        envFile = path.join(REPO_ROOT, ".env");
+      }
+    }
     else if (args[i] === "--cli-path" && args[i + 1]) cliPath = args[++i];
     else if (args[i] === "--help" || args[i] === "-h") {
       console.log(`Usage: node scripts/generate-keypair.js [options]
@@ -49,6 +62,8 @@ Options:
   --node-url URL   Node RPC URL (default: ${DEFAULT_NODE_URL})
   --count N        Number of keypairs (default: 1)
   --json           Machine-readable JSON output
+  --env [PATH]     Write APP_PUBKEY, APP_SECRET_KEY, NODE_RPC_URL to .env
+                   (default: .env in repo root). Only adds missing vars.
   --cli-path PATH  Path to usernode CLI binary
 
 The script tries these methods in order:
@@ -58,7 +73,7 @@ The script tries these methods in order:
     }
   }
 
-  return { nodeUrl, count, json, cliPath };
+  return { nodeUrl, count, json, cliPath, envFile };
 }
 
 // ── Method 1: Node RPC ──────────────────────────────────────────────────────
@@ -82,14 +97,9 @@ function findCliBinary(explicitPath) {
     return null;
   }
 
-  // Resolve the dapp-starter repo root (one level up from scripts/)
-  const repoRoot = path.resolve(__dirname, "..");
-
   const candidates = [
-    // Sibling repo: ../usernode/target/{release,debug}/usernode
-    path.resolve(repoRoot, "..", "usernode", "target", "release", "usernode"),
-    path.resolve(repoRoot, "..", "usernode", "target", "debug", "usernode"),
-    // In PATH
+    path.resolve(REPO_ROOT, "..", "usernode", "target", "release", "usernode"),
+    path.resolve(REPO_ROOT, "..", "usernode", "target", "debug", "usernode"),
     "usernode",
   ];
 
@@ -116,15 +126,60 @@ function tryCliBinary(binPath) {
   return JSON.parse(raw.trim());
 }
 
+// ── .env helpers ────────────────────────────────────────────────────────────
+
+function parseEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {};
+  const lines = fs.readFileSync(filePath, "utf8").split("\n");
+  const vars = {};
+  for (const line of lines) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
+    if (m) vars[m[1]] = m[2];
+  }
+  return vars;
+}
+
+function writeEnvVars(filePath, nodeUrl, keypair) {
+  const existing = parseEnvFile(filePath);
+  const toAdd = {};
+
+  if (!existing.APP_PUBKEY) toAdd.APP_PUBKEY = keypair.address;
+  if (!existing.APP_SECRET_KEY) toAdd.APP_SECRET_KEY = keypair.secret_key;
+  if (!existing.NODE_RPC_URL) toAdd.NODE_RPC_URL = nodeUrl;
+
+  const keys = Object.keys(toAdd);
+  if (keys.length === 0) {
+    console.error(`\n.env already has APP_PUBKEY, APP_SECRET_KEY, NODE_RPC_URL — no changes made.`);
+    return;
+  }
+
+  const block = keys.map((k) => `${k}=${toAdd[k]}`).join("\n");
+  const fileExists = fs.existsSync(filePath);
+
+  if (fileExists) {
+    const content = fs.readFileSync(filePath, "utf8");
+    const sep = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
+    fs.appendFileSync(filePath, sep + block + "\n");
+  } else {
+    fs.writeFileSync(filePath, block + "\n");
+  }
+
+  const rel = path.relative(process.cwd(), filePath) || filePath;
+  console.error(`\nWrote to ${rel}:`);
+  for (const k of keys) console.error(`  ${k}=${toAdd[k]}`);
+  if (Object.keys(existing).length > 0) {
+    const skipped = ["APP_PUBKEY", "APP_SECRET_KEY", "NODE_RPC_URL"].filter((k) => existing[k]);
+    if (skipped.length > 0) console.error(`  (kept existing: ${skipped.join(", ")})`);
+  }
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function generateOne(nodeUrl, cliBin) {
-  // Try RPC first
   try {
     return { method: "rpc", ...(await tryRpc(nodeUrl)) };
   } catch (_) {}
 
-  // Try CLI
   if (cliBin) {
     try {
       return { method: "cli", ...tryCliBinary(cliBin) };
@@ -135,7 +190,7 @@ async function generateOne(nodeUrl, cliBin) {
 }
 
 async function main() {
-  const { nodeUrl, count, json, cliPath } = parseArgs();
+  const { nodeUrl, count, json, cliPath, envFile } = parseArgs();
   const cliBin = findCliBinary(cliPath);
 
   if (!json) {
@@ -173,6 +228,10 @@ async function main() {
   } else {
     console.log(`\nUse the 'address' as APP_PUBKEY in your dapp.`);
     console.log(`Keep the secret_key safe — it controls funds sent to the address.`);
+  }
+
+  if (envFile && results.length > 0) {
+    writeEnvVars(envFile, nodeUrl, results[0]);
   }
 }
 

@@ -360,6 +360,11 @@ const TX_SEND_OPTS = { timeoutMs: 90000, pollIntervalMs: 1500 };
 // ── Explorer API discovery (needed for bridge's waitForTransactionVisible) ──
 const EXPLORER_BASE = window.location.origin + "/explorer-api";
 (async function setupExplorer() {
+  const mockEnabled = window.usernode && typeof window.usernode.isMockEnabled === "function"
+    ? await window.usernode.isMockEnabled()
+    : false;
+  if (mockEnabled) return;
+
   try {
     const resp = await fetch(`${EXPLORER_BASE}/active_chain`);
     if (!resp.ok) return;
