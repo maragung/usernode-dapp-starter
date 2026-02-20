@@ -1,12 +1,11 @@
 ## Usernode dapp Starter
 
-This is a minimal, clone-and-go starter dapp that works in **two modes**:
+A minimal, clone-and-go starter for building dapps on the Usernode blockchain. Each dapp is a single self-contained HTML file that runs in **two modes**:
 
-- **Local dev mode**: you open the app in your normal browser (served from `localhost:8000`).
-- **dapp mode**: the same `index.html` is loaded inside the **Usernode Flutter app** in the dapps WebView.
+- **Local dev mode**: served by `server.js` at `localhost:8000`, using mock endpoints.
+- **Dapp mode**: loaded inside the **Usernode Flutter mobile app** WebView, using the native bridge.
 
-The goal is to keep the dapp code identical across both modes, by exposing a small JS API surface via
-`usernode-bridge.js`.
+The bridge (`usernode-bridge.js`) abstracts the difference so your dapp code is identical in both modes.
 
 ---
 
@@ -14,35 +13,33 @@ The goal is to keep the dapp code identical across both modes, by exposing a sma
 
 ### 1) Run the server
 
-From this directory:
-
-```bash
-node server.js
-```
-
-Then open:
-
-- `http://localhost:8000`
-
-### 2) Enable local dev mocked APIs (optional)
-
-Some endpoints are **only enabled** when you start the server with a flag:
-
 ```bash
 node server.js --local-dev
 ```
 
-This enables the mock endpoints used by the bridge in local dev mode:
+Then open http://localhost:8000.
+
+The `--local-dev` flag enables in-memory mock transaction endpoints:
 
 - `POST /__mock/sendTransaction`
 - `POST /__mock/getTransactions`
+- `GET /__mock/enabled` — probed by the bridge to auto-detect mock mode
 
-If you don’t pass `--local-dev`, those endpoints return **404**.
+Without `--local-dev`, those endpoints return **404**.
 
-### 3) Change the port (optional)
+### 2) Change the port (optional)
 
 ```bash
 PORT=8001 node server.js --local-dev
+```
+
+### 3) Generate an app keypair (optional)
+
+Each dapp needs its own unique address. Use the included script:
+
+```bash
+node scripts/generate-keypair.js           # print to stdout
+node scripts/generate-keypair.js --env     # write APP_PUBKEY + APP_SECRET_KEY to .env
 ```
 
 ---
@@ -51,58 +48,70 @@ PORT=8001 node server.js --local-dev
 
 ### Files
 
-- **`index.html`**: a tiny demo UI that:
-  - shows the node address via `getNodeAddress()`
-  - can send a demo tx via `sendTransaction(destination_pubkey, amount, memo)`
-  - polls `getTransactions(filterOptions)` every 5 seconds and renders the list
-- **`usernode-bridge.js`**: a “bridge” script that defines the JS APIs with different behavior depending on mode.
-- **`server.js`**: serves `index.html` and `usernode-bridge.js`, and (optionally) exposes mock endpoints when `--local-dev` is enabled.
+- **`index.html`** — a demo dapp UI that shows node address, balance, and transaction history with send capability.
+- **`usernode-bridge.js`** — the JS bridge providing `getNodeAddress()`, `sendTransaction()`, and `getTransactions()` with mode-dependent behavior.
+- **`server.js`** — serves static files, exposes mock endpoints (when `--local-dev`), and proxies `/explorer-api/*` to the block explorer.
 
-### Mode behavior
+### The three APIs
 
-#### Local dev mode (normal browser at `localhost:8000`)
+| Function | Description |
+|---|---|
+| `getNodeAddress()` | Returns the user's public key / address |
+| `sendTransaction(dest, amount, memo, opts?)` | Sends a transaction (waits for on-chain confirmation by default) |
+| `getTransactions(filterOptions?)` | Fetches transactions for an account |
 
-`usernode-bridge.js` will:
+### Mock mode auto-detection
 
-- **`getNodeAddress()`**: returns a mock pubkey/address, stable via `localStorage`
-- **`sendTransaction(...)`**: calls `POST /__mock/sendTransaction` (requires `node server.js --local-dev`)
-- **`getTransactions(filterOptions)`**: calls `POST /__mock/getTransactions` (requires `node server.js --local-dev`)
+When the server runs `--local-dev`, the bridge probes `GET /__mock/enabled` once on first use. If it responds 200, **all** `sendTransaction` and `getTransactions` calls route to mock endpoints — even inside the Flutter WebView. This means you can test dapps on-device without sending real transactions.
 
-Mock transactions are stored **in memory** in `server.js` (so they reset when the server restarts).
+- `getNodeAddress` still uses the native bridge when in a WebView (so the real user address appears in mock transactions).
+- The probe result is cached for the lifetime of the page.
 
-You can override the mock address value:
+### Explorer API proxy
 
-```js
-localStorage.setItem("usernode:mockAddress", "ut1_...your_mock_address...")
-```
+The server proxies `/explorer-api/*` to `https://alpha2.usernodelabs.org/explorer/api/*` so clients avoid CORS issues. Note that this proxy works even in `--local-dev` — see `AGENTS.md` Section 17 for how to avoid bypassing mock mode.
 
-If you don’t set that, the bridge generates a random value once and stores it in:
+### dapp mode (Flutter WebView)
+
+When loaded inside the app, the bridge detects the native environment and routes `sendTransaction` through the WebView native bridge (Flutter handles signing and submission). In local dev the mock auto-detection takes priority over native, so on-device testing with `--local-dev` uses mock endpoints.
 
 ---
 
-#### dapp mode (loaded inside the Flutter app WebView)
+## Examples
 
-`usernode-bridge.js` will detect the native environment by checking for the WebView channel:
+The `examples/` directory contains reference dapps:
 
-- `localStorage["usernode:mockPubkey"]`
+| Example | Description |
+|---|---|
+| [`examples/cis/`](examples/cis/) | Collective Intelligence Service — surveys, voting, and AI bots |
+| [`examples/last-one-wins/`](examples/last-one-wins/) | Token game — last sender before the timer expires wins the pot |
+| [`examples/falling-sands/`](examples/falling-sands/) | Multiplayer falling-sands simulation with WASM + WebSocket |
 
-In this mode:
+Run the combined examples server:
 
-- **`sendTransaction(...)`**: goes through the WebView native bridge (Flutter handles it).
-- **`getTransactions(filterOptions)`**: is intended to call a remote URL you’ll configure later via:
-  - `window.usernode.transactionsBaseUrl = "https://..."`
-  - For now, if it’s not set, it **throws an error**.
+```bash
+cd examples
+cp ../usernode-bridge.js .
+cp ../index.html .
+node server.js --local-dev
+```
 
-The Flutter app’s dapps screen already maps `localhost` → `10.0.2.2` when needed.
+Or run any sub-app independently (e.g., `cd examples/last-one-wins && node server.js --local-dev`).
+
+---
+
+## Building your own dapp
+
+1. Edit `index.html` (or create a new HTML file at root).
+2. Include the bridge: `<script src="/usernode-bridge.js"></script>`.
+3. Generate a unique `APP_PUBKEY` with `node scripts/generate-keypair.js`.
+4. Define your memo schema and state logic.
+5. See `AGENTS.md` for the full guide — architecture patterns, UI patterns, conflict resolution, server-side payouts, and more.
+
+---
 
 ## Troubleshooting
 
 ### Android emulator: accessing host `localhost`
 
-Inside an **Android emulator**, `localhost` refers to the emulator itself. To reach your host machine’s `localhost`,
-use:
-
-- **`http://10.0.2.2:8000`**
-
-- `window.Usernode.postMessage(...)`
-
+Inside an **Android emulator**, `localhost` refers to the emulator itself. To reach your host machine's `localhost`, use `http://10.0.2.2:8000`.

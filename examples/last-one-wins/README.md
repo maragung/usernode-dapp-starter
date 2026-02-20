@@ -19,7 +19,7 @@ In local dev mode the timer is 2 minutes so you can test the full cycle quickly.
 
 1. Player calls `sendTransaction(APP_PUBKEY, amount, memo)` via the bridge
 2. Server polls chain / mock store for new transactions to `APP_PUBKEY`
-3. Each `{ app: "lastwin", type: "entry" }` transaction resets the timer and adds to the pot
+3. Each `{ app: "lastwin", type: "entry" }` transaction resets the timer and adds to the pot (usernames are tracked via `{ app: "lastwin", type: "set_username" }` transactions)
 4. When the timer expires, the server sends a payout transaction from `APP_PUBKEY` to the winner
 5. The payout memo is `{ app: "lastwin", type: "payout", round: N, winner: "ut1..." }`
 6. A new round begins
@@ -31,6 +31,10 @@ The server holds `APP_SECRET_KEY` and calls two node RPC endpoints:
 - `POST /wallet/send` — sends the payout transaction
 
 If the payout fails due to UTXO fragmentation (many small deposits), the server attempts a consolidation self-send before retrying.
+
+### Usernames
+
+Players can set a display name via `{ app: "lastwin", type: "set_username", username: "alice_a1b2c3" }` transactions. The server tracks the latest username per sender and includes the mapping in the game state response. The client shows usernames (with a clickable pill to edit) instead of raw public keys.
 
 ### Game state API
 
@@ -48,7 +52,8 @@ If the payout fails due to UTXO fragmentation (many small deposits), the server 
   "entries": [...],
   "pastRounds": [...],
   "payoutInProgress": false,
-  "appPubkey": "ut1..."
+  "appPubkey": "ut1...",
+  "usernames": { "ut1...": "alice_a1b2c3" }
 }
 ```
 
