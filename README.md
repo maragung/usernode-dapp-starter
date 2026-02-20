@@ -29,13 +29,6 @@ This repo is designed to work with AI coding assistants (Cursor, Copilot, etc.).
 
 4. **Test locally** with `node server.js --local-dev` and open http://localhost:8000. Use an incognito window to simulate a second user.
 
-### Tips for better results
-
-- **Start simple.** A single-screen app with one transaction type is a good first prompt. You can add features incrementally.
-- **Mention if you need server-side logic.** Most dapps are client-only (all state derived from on-chain transactions). If your app needs timers, automated payouts, or a backend database, say so — the agent will modify `server.js` accordingly.
-- **Reference the examples.** If your idea is similar to an existing example, mention it: "Similar to the CIS survey app, but for..." — the agent can use it as a starting point.
-- **Ask for `.env` generation** — every dapp needs its own on-chain address: "Generate a keypair and `.env` file for this dapp."
-
 ---
 
 ## Quickstart (manual)
