@@ -137,6 +137,7 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [score, setScore] = useState(0)
+  const [speed, setSpeed] = useState(GAME_LOOP_INTERVAL)
 
   // Time
   const [timeRemaining, setTimeRemaining] = useState(null)
@@ -220,6 +221,7 @@ export default function App() {
       nextDirection: 'RIGHT',
     })
     setScore(0)
+    setSpeed(GAME_LOOP_INTERVAL)
     setIsPaused(false)
   }
 
@@ -253,6 +255,7 @@ export default function App() {
     }
 
     setBattlePlayers(players)
+    setScore(0)
     setGameState({ food })
     battleInactivityRef.current = {}
     players.forEach((p) => {
@@ -325,6 +328,7 @@ export default function App() {
         // Check food collision
         if (newX === prev.food.x && newY === prev.food.y) {
           setScore((s) => s + 10)
+          setSpeed((s) => s / 1.0003)
           
           if (gameMode === RANKED_MODE && timeLimit) {
             setTimeRemaining((t) => t + Math.floor(timeLimit * 0.1))
@@ -355,9 +359,9 @@ export default function App() {
       })
     }
 
-    gameLoopRef.current = setInterval(gameLoop, GAME_LOOP_INTERVAL)
+    gameLoopRef.current = setInterval(gameLoop, speed)
     return () => clearInterval(gameLoopRef.current)
-  }, [isPlaying, gameState, gameMode, isPaused, timeLimit])
+  }, [isPlaying, gameState, gameMode, isPaused, timeLimit, speed])
 
   // ============ BATTLE GAME LOOP ============
   useEffect(() => {
@@ -684,6 +688,9 @@ export default function App() {
     if (gameLoopRef.current) clearInterval(gameLoopRef.current)
     if (timerRef.current) clearInterval(timerRef.current)
 
+    const player = finalPlayers.find((p) => p.id === 0)
+    if (player) setScore(player.food)
+
     const winner = finalPlayers.find((p) => p.alive)
     if (winner && winner.id === 0) {
       await submitBattleScore(winner.food)
@@ -760,6 +767,10 @@ export default function App() {
     setIsPlaying(false)
     if (gameLoopRef.current) clearInterval(gameLoopRef.current)
     if (timerRef.current) clearInterval(timerRef.current)
+    if (gameMode === BATTLE_MODE && battlePlayers) {
+      const player = battlePlayers.find((p) => p.id === 0)
+      if (player) setScore(player.food)
+    }
     setScreen('game-over')
   }
 
