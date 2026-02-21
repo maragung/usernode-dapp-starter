@@ -155,14 +155,14 @@ let chainId = null;
 const seenTxIds = new Set();
 
 async function pollChainTransactions() {
-  if (LOCAL_DEV) return; // Don't poll real chain in local dev
+  if (LOCAL_DEV) return;
 
   try {
     if (!chainId) {
       const activeChain = await httpsRequest("GET", `https://${EXPLORER_UPSTREAM}${EXPLORER_UPSTREAM_BASE}/active_chain`);
       if (activeChain && activeChain.chain_id) {
         chainId = activeChain.chain_id;
-        pushLog('system', `Chain poller started for chain ID: ${chainId}`);
+        log('CHAIN', `Chain poller started (Chain ID: ${chainId})`);
       } else {
         console.warn("Could not discover chain ID for polling.");
         return;
@@ -172,10 +172,10 @@ async function pollChainTransactions() {
     const data = await httpsRequest(
       "POST",
       `https://${EXPLORER_UPSTREAM}${EXPLORER_UPSTREAM_BASE}/${chainId}/transactions`,
-      { account: APP_PUBKEY, limit: 100 } // Poll for transactions to our app
+      { account: APP_PUBKEY, limit: 100 }
     );
 
-    const items = (data.items || []).reverse(); // Process oldest first
+    const items = (data.items || []).reverse();
 
     let newTxs = 0;
     for (const tx of items) {
@@ -187,17 +187,13 @@ async function pollChainTransactions() {
         newTxs++;
         try {
           const memo = JSON.parse(tx.memo);
-          pushLog('chain', `[chain] Processed ${memo.type} from ${tx.source || tx.from_pubkey}`);
+          log('CHAIN', `Processed transaction: ${memo.type}`);
         } catch (e) {
-          pushLog('chain', `[chain] Processed transaction ${txId}`);
+          log('CHAIN', `Processed transaction: ${txId}`);
         }
       }
     }
-    if (newTxs > 0) {
-      pushLog('chain', `[chain] Applied ${newTxs} new transaction(s).`);
-    }
   } catch (e) {
-    // Suppress timeout errors, log others
     if (e.message !== "Request timeout") {
       console.error("Chain poll failed:", e.message);
     }
@@ -302,15 +298,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (pathname === '/__logs') {
-    const q = parsedUrl.query || {};
-    const type = q.type || null;
-    const filtered = type ? logs.filter(l => l.type === type) : logs.slice(-200);
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ logs: filtered }));
-    return;
-  }
-
   // Snake game API endpoints
   if (pathname === "/__snake/leaderboard") {
     const leaderboard = snakeGame.getLeaderboard();
@@ -364,14 +351,9 @@ const server = http.createServer((req, res) => {
 // Schedule management
 const schedulesByMode = { ranked: [], battle: [] };
 const scheduleHistory = new Map(); // scheduleId -> Set<playerId>
-// Simple in-memory log buffer
-const LOG_LIMIT = 500;
-const logs = [];
-function pushLog(type, message) {
-  const entry = { ts: Date.now(), type, message };
-  logs.push(entry);
-  if (logs.length > LOG_LIMIT) logs.shift();
-  console.log(message);
+function log(prefix, message) {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`[${timestamp}] ${prefix} ${message}`);
 }
 
 function generateServerSchedules(mode) {
@@ -399,7 +381,7 @@ function generateServerSchedules(mode) {
     }
   }
   schedulesByMode[mode] = result;
-  pushLog(mode, `Generated ${result.length} schedules for ${mode}`);
+  log(mode.toUpperCase(), `Generated ${result.length} schedules (${mode} mode)`);
   return result;
 }
 
@@ -428,17 +410,21 @@ const battleRooms = new Map();
 let nextRoomId = 1;
 
 class BattleRoom {
-  constructor(id, maxPlayers = 4) {
+  constructor(id, maxPlayers = 4, durationSeconds = 300) {
     this.id = id;
     this.maxPlayers = maxPlayers;
     this.players = new Map();
     this.gameState = {
       food: { x: 10, y: 10 },
       activePlayers: 0,
-      status: 'waiting' // waiting, playing, finished
+      status: 'countdown' // countdown, playing, finished
     };
+    this.durationSeconds = durationSeconds;
+    this.countdownSeconds = 10; // 10 second countdown before battle starts
     this.createdAt = Date.now();
-    pushLog('battle', `[Battle] Created room ${this.id}`);
+    this.phaseStartedAt = Date.now();
+    this.endTimer = null;
+    log('battle', `[Room ${this.id}] Created with ${durationSeconds}s duration and ${this.countdownSeconds}s countdown`);
   }
 
   addPlayer(playerId, playerName) {
@@ -454,32 +440,69 @@ class BattleRoom {
       score: 0,
       joinedAt: Date.now()
     });
-    pushLog('battle', `[Battle Room ${this.id}] Player ${playerName} added. Total: ${this.players.size}`);
+    log('battle', `[Room ${this.id}] Player ${playerName} joined (${this.players.size}/${this.maxPlayers})`);
     return true;
   }
 
   removePlayer(playerId) {
     this.players.delete(playerId);
-    pushLog('battle', `[Battle Room ${this.id}] Player ${playerId} removed. Total: ${this.players.size}`);
+    log('battle', `[Room ${this.id}] Player left (${this.players.size}/${this.maxPlayers})`);
+  }
+
+  startCountdown() {
+    if (this.gameState.status !== 'countdown') return;
+    this.gameState.status = 'countdown';
+    this.phaseStartedAt = Date.now();
+    log('battle', `[Room ${this.id}] Countdown started (${this.countdownSeconds}s until battle)`);
+    
+    if (this.endTimer) clearTimeout(this.endTimer);
+    this.endTimer = setTimeout(() => this.transitionToPlaying(), this.countdownSeconds * 1000);
+  }
+
+  transitionToPlaying() {
+    if (this.gameState.status === 'countdown') {
+      this.gameState.status = 'playing';
+      this.gameState.activePlayers = this.players.size;
+      this.phaseStartedAt = Date.now();
+      log('battle', `[Room ${this.id}] Battle started with ${this.players.size} players (${this.durationSeconds}s duration)`);
+      
+      if (this.endTimer) clearTimeout(this.endTimer);
+      this.endTimer = setTimeout(() => this.end(), this.durationSeconds * 1000);
+    }
+  }
+
+  end() {
+    this.gameState.status = 'finished';
+    log('battle', `[Room ${this.id}] Battle ended after ${this.durationSeconds}s`);
+  }
+
+  getElapsedMs() {
+    return Date.now() - this.phaseStartedAt;
+  }
+
+  isFinished() {
+    return this.gameState.status === 'finished';
   }
 
   canStart() {
-    return this.players.size >= 1 && this.gameState.status === 'waiting';
-  }
-
-  start() {
-    this.gameState.status = 'playing';
-    this.gameState.activePlayers = this.players.size;
-    pushLog('battle', `[Battle Room ${this.id}] Game started with ${this.players.size} players.`);
+    return this.players.size >= 1 && this.gameState.status === 'countdown';
   }
 
   getState() {
+    const elapsed = this.getElapsedMs();
+    const phaseTimeLeft = this.gameState.status === 'countdown' 
+      ? Math.max(0, this.countdownSeconds * 1000 - elapsed) 
+      : Math.max(0, this.durationSeconds * 1000 - elapsed);
+    
     return {
       roomId: this.id,
       players: Array.from(this.players.values()),
       gameState: this.gameState,
       playerCount: this.players.size,
-      maxPlayers: this.maxPlayers
+      maxPlayers: this.maxPlayers,
+      phaseTimeLeft,
+      countdownSeconds: this.countdownSeconds,
+      durationSeconds: this.durationSeconds
     };
   }
 
@@ -489,6 +512,10 @@ class BattleRoom {
 
   isEmpty() {
     return this.players.size === 0;
+  }
+
+  cleanup() {
+    if (this.endTimer) clearTimeout(this.endTimer);
   }
 }
 
@@ -506,7 +533,7 @@ function setupWebSocketServer(server) {
 
   wsServer.on('connection', (socket, req) => {
     const clientIp = req.socket.remoteAddress;
-    pushLog('ws', `[WS] Client connected from ${clientIp}`);
+    log('WS', `Client connected from ${clientIp}`);
 
     let playerId = null;
     let roomId = null;
@@ -529,7 +556,6 @@ function setupWebSocketServer(server) {
             return;
           }
 
-          // ensure not already queued in another schedule
           for (const [otherId, wr] of waitingRooms) {
             if (wr.sockets.has(message.playerId)) {
               socket.send(JSON.stringify({ type: 'error', message: 'Already queued in another schedule' }));
@@ -554,7 +580,8 @@ function setupWebSocketServer(server) {
           socket.scheduleId = sid;
           socket.playerId = message.playerId;
 
-          pushLog('ws', `[WS] Player ${message.playerId.slice(0,10)}... joined schedule ${sid}`);
+          const waitMinutes = Math.round((wr.startTime - Date.now()) / 1000 / 60);
+          log('WS', `Player joined schedule (${wr.sockets.size} queued, starts in ${waitMinutes}m)`);
           socket.send(JSON.stringify({ type: 'joined_schedule', scheduleId: sid, startTime: wr.startTime }));
 
           if (!wr.timer) {
@@ -585,9 +612,9 @@ function setupWebSocketServer(server) {
         if (message.type === 'start_game' && roomId) {
           const room = battleRooms.get(roomId);
           if (room && room.canStart()) {
-            room.start();
+            room.startCountdown();
             broadcastToRoom(roomId, {
-              type: 'game_started',
+              type: 'game_starting',
               state: room.getState()
             });
           }
@@ -595,7 +622,7 @@ function setupWebSocketServer(server) {
 
         if (message.type === 'move' && roomId && playerId) {
           const room = battleRooms.get(roomId);
-          if (room) {
+          if (room && room.gameState.status === 'playing') {
             const player = room.players.get(playerId);
             if (player && player.alive) {
               player.nextDir = message.direction;
@@ -613,6 +640,7 @@ function setupWebSocketServer(server) {
           const wr = waitingRooms.get(sid);
           if (wr) {
             wr.sockets.delete(socket.playerId);
+            log('WS', `Player left schedule (${wr.sockets.size} remaining)`);
             if (wr.sockets.size === 0) waitingRooms.delete(sid);
             else broadcastScheduleState(sid);
           }
@@ -626,8 +654,9 @@ function setupWebSocketServer(server) {
             room.removePlayer(playerId);
             unmapSocketFromRoom(socket, roomId);
             if (room.isEmpty()) {
+              room.cleanup();
               battleRooms.delete(roomId);
-              pushLog('battle', `[Battle] Room ${roomId} is empty and has been deleted.`);
+              log('BATTLE', `Room ${roomId} cleaned up (all players left)`);
             } else {
               broadcastToRoom(roomId, {
                 type: 'player_left',
@@ -647,6 +676,7 @@ function setupWebSocketServer(server) {
         const wr = waitingRooms.get(socket.scheduleId);
         if (wr) {
           wr.sockets.delete(socket.playerId);
+          log('WS', `Player disconnected from schedule (${wr.sockets.size} remaining)`);
           if (wr.sockets.size === 0) waitingRooms.delete(socket.scheduleId);
           else broadcastScheduleState(socket.scheduleId);
         }
@@ -657,8 +687,9 @@ function setupWebSocketServer(server) {
           room.removePlayer(playerId);
           unmapSocketFromRoom(socket, roomId);
           if (room.isEmpty()) {
+            room.cleanup();
             battleRooms.delete(roomId);
-            pushLog('battle', `[Battle] Room ${roomId} is empty and has been deleted.`);
+            log('BATTLE', `Room ${roomId} cleaned up (player disconnected)`);
           } else {
             broadcastToRoom(roomId, {
               type: 'player_left',
@@ -668,7 +699,7 @@ function setupWebSocketServer(server) {
           }
         }
       }
-      pushLog('ws', `[WS] Client disconnected`);
+      log('WS', `Client disconnected from ${clientIp}`);
     });
 
     socket.on('error', (error) => {
