@@ -189,6 +189,12 @@ export default function App() {
     }
   }
 
+  const disconnectWallet = () => {
+    setUserAddress(null)
+    setConnected(false)
+    localStorage.removeItem('snake:user_address')
+  }
+
   // ============ LEADERBOARD ============
   const fetchLeaderboards = async () => {
     try {
@@ -228,8 +234,8 @@ export default function App() {
   const initBattleGame = () => {
     const players = []
     const positions = [[5, 5], [15, 5], [10, 10], [5, 15], [15, 15]]
-    const numPlayers = Math.floor(Math.random() * (BATTLE_MAX_PLAYERS - 1)) + 2
-    
+    const numPlayers = 2 // Player vs 1 AI
+
     for (let i = 0; i < numPlayers; i++) {
       const [x, y] = positions[i]
       players.push({
@@ -781,15 +787,20 @@ export default function App() {
         <div className="header-content">
           <div className="logo">🐍 Snake Game</div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <button className="btn btn-secondary" onClick={connectWallet} style={{ display: connected ? 'none' : 'inline-flex' }}>
-              Connect Wallet
-            </button>
-            {connected && (
+            {!connected ? (
+              <button className="btn btn-secondary" onClick={connectWallet}>
+                Connect Wallet
+              </button>
+            ) : (
               <>
                 <div className="wallet-info">
-                  <span>✓</span>
-                  <div className="wallet-address">{userAddress.slice(-8)}</div>
+                  <div className="wallet-address">
+                    {userAddress.slice(0, 5)}...{userAddress.slice(-6)}
+                  </div>
                 </div>
+                <button className="btn btn-secondary" onClick={disconnectWallet}>
+                  Disconnect
+                </button>
               </>
             )}
           </div>
