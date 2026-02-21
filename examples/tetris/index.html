@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>TETRIS</h1>
+            <div class="game-stats">
+                <div class="stat">
+                    <span class="label">Score:</span>
+                    <span id="score">0</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Level:</span>
+                    <span id="level">1</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Lines:</span>
+                    <span id="lines">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="game-container">
+            <div class="game-board">
+                <canvas id="board" width="300" height="600"></canvas>
+            </div>
+            
+            <div class="side-panel">
+                <div class="next-piece">
+                    <h3>NEXT</h3>
+                    <canvas id="next-piece" width="120" height="120"></canvas>
+                </div>
+                
+                <div class="controls">
+                    <button id="start-btn" class="btn btn-primary">START</button>
+                    <button id="pause-btn" class="btn btn-secondary">PAUSE</button>
+                    <button id="reset-btn" class="btn btn-danger">RESET</button>
+                </div>
+                
+                <div class="leaderboard">
+                    <h3>LEADERBOARD</h3>
+                    <ul id="leaderboard-list">
+                        <!-- Leaderboard items will be populated here -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>CONTROLS</h3>
+            <p>← → : Move Left/Right | ↑ : Rotate | ↓ : Soft Drop | Space : Hard Drop | P : Pause</p>
+        </div>
+
+        <div id="game-over-modal" class="modal">
+            <div class="modal-content">
+                <h2>GAME OVER</h2>
+                <p>Your score: <span id="final-score">0</span></p>
+                <div class="input-group">
+                    <label for="player-name">Enter your name:</label>
+                    <input type="text" id="player-name" maxlength="20" placeholder="Your name">
+                </div>
+                <div class="modal-buttons">
+                    <button id="submit-score" class="btn btn-primary">Submit Score</button>
+                    <button id="close-modal" class="btn btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="confirm-exit" class="modal">
+            <div class="modal-content">
+                <h2>Confirm Exit</h2>
+                <p>Do you want to exit the game? Your progress will be saved.</p>
+                <div class="modal-buttons">
+                    <button id="exit-confirm" class="btn btn-danger">Exit</button>
+                    <button id="exit-cancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
