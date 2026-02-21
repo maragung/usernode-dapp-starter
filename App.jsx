@@ -112,6 +112,43 @@ function stopProgressBar() {
   }
 }
 
+// ============ SOUND EFFECTS ============
+const playSound = (type) => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext
+    if (!AudioContext) return
+
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+
+    const now = ctx.currentTime
+
+    if (type === 'eat') {
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(600, now)
+      osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1)
+      gain.gain.setValueAtTime(0.1, now)
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1)
+      osc.start(now)
+      osc.stop(now + 0.1)
+    } else if (type === 'gameover') {
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(200, now)
+      osc.frequency.exponentialRampToValueAtTime(50, now + 0.5)
+      gain.gain.setValueAtTime(0.1, now)
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5)
+      osc.start(now)
+      osc.stop(now + 0.5)
+    }
+  } catch (e) {
+    // Ignore audio errors
+  }
+}
+
 // ============ HELPER FUNCTIONS ============
 function getMedalEmoji(rank) {
   if (rank === 1) return '🥇'
@@ -160,7 +197,6 @@ export default function App() {
   const gameLoopRef = useRef(null)
   const timerRef = useRef(null)
   const battleInactivityRef = useRef({})
-  const lastTapRef = useRef(0)
   const touchStartRef = useRef(null)
 
   // ============ INITIALIZATION ============
@@ -329,7 +365,7 @@ export default function App() {
 
         // Check self collision
         if (prev.snake.some((seg) => seg.x === newX && seg.y === newY)) {
-          setIsPlaying(false)
+          setTimeout(endGame, 0)
           return prev
         }
 
@@ -339,6 +375,7 @@ export default function App() {
         if (newX === prev.food.x && newY === prev.food.y) {
           setScore((s) => s + 10)
           setSpeed((s) => s / 1.0003)
+          playSound('eat')
           
           if (gameMode === RANKED_MODE && timeLimit) {
             setTimeRemaining((t) => t + Math.floor(timeLimit * 0.1))
@@ -420,6 +457,7 @@ export default function App() {
 
           if (foodCollided) {
             battleInactivityRef.current[player.id] = Date.now()
+            if (player.id === 0) playSound('eat')
             return {
               ...player,
               snake: newSnake,
@@ -551,30 +589,41 @@ export default function App() {
       }
     }
 
-    const handleCanvasDoubleTap = () => {
-      const now = Date.now()
-      if (now - lastTapRef.current < 300) {
-        setIsPaused((prev) => !prev)
-      }
-      lastTapRef.current = now
-    }
-
     const handleTouchStart = (e) => {
-      if (e.touches.length === 1) {
-        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      if (e.touches.length !== 1) return
+      e.preventDefault()
+
+      const touch = e.touches[0]
+      const canvas = canvasRef.current
+      
+      if (isPaused || !canvas) return
+
+      const rect = canvas.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      const dx = touch.clientX - centerX
+      const dy = touch.clientY - centerY
+
+      if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          handleDirectionChange(dx > 0 ? 'RIGHT' : 'LEFT')
+        } else {
+          handleDirectionChange(dy > 0 ? 'DOWN' : 'UP')
+        }
       }
+
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY }
     }
 
     const handleTouchMove = (e) => {
-      if (!touchStartRef.current || e.touches.length !== 1) {
-        return
-      }
+      if (!touchStartRef.current || e.touches.length !== 1) return
       e.preventDefault()
 
+      const touch = e.touches[0]
       const touchEnd = { x: e.touches[0].clientX, y: e.touches[0].clientY }
       const dx = touchEnd.x - touchStartRef.current.x
       const dy = touchEnd.y - touchStartRef.current.y
-      const minSwipeDist = 20
+      const minSwipeDist = 30
 
       if (Math.abs(dx) > minSwipeDist || Math.abs(dy) > minSwipeDist) {
         let direction
@@ -584,23 +633,21 @@ export default function App() {
           direction = dy > 0 ? 'DOWN' : 'UP'
         }
         handleDirectionChange(direction)
-        touchStartRef.current = null
+        touchStartRef.current = { x: touchEnd.x, y: touchEnd.y }
       }
     }
 
     document.addEventListener('keydown', handleKeyPress)
     const canvas = canvasRef.current
-    canvas?.addEventListener('click', handleCanvasDoubleTap)
     canvas?.addEventListener('touchstart', handleTouchStart, { passive: false })
     canvas?.addEventListener('touchmove', handleTouchMove, { passive: false })
 
     return () => {
       document.removeEventListener('keydown', handleKeyPress)
-      canvas?.removeEventListener('click', handleCanvasDoubleTap)
       canvas?.removeEventListener('touchstart', handleTouchStart)
       canvas?.removeEventListener('touchmove', handleTouchMove)
     }
-  }, [isPlaying, gameState, handleDirectionChange])
+  }, [isPlaying, gameState, handleDirectionChange, isPaused])
 
   const handleDirectionChange = useCallback((direction) => {
     if (!direction) return
@@ -709,13 +756,12 @@ export default function App() {
       ctx.font = '24px Arial'
       ctx.textAlign = 'center'
       ctx.fillText('PAUSED', displayWidth / 2, displayHeight / 2)
-      ctx.font = '14px Arial'
-      ctx.fillText('Press SPACE or double tap to resume', displayWidth / 2, displayHeight / 2 + 30)
     }
   }, [gameState, battlePlayers, gameMode, isPaused])
 
   // ============ GAME END HANDLERS ============
   const endGame = async () => {
+    playSound('gameover')
     setIsPlaying(false)
     if (gameLoopRef.current) clearInterval(gameLoopRef.current)
     if (timerRef.current) clearInterval(timerRef.current)
@@ -728,6 +774,7 @@ export default function App() {
   }
 
   const endBattleGame = async (finalPlayers) => {
+    playSound('gameover')
     setIsPlaying(false)
     if (gameLoopRef.current) clearInterval(gameLoopRef.current)
     if (timerRef.current) clearInterval(timerRef.current)
@@ -808,6 +855,7 @@ export default function App() {
   }
 
   const handleExit = () => {
+    playSound('gameover')
     setIsPlaying(false)
     if (gameLoopRef.current) clearInterval(gameLoopRef.current)
     if (timerRef.current) clearInterval(timerRef.current)
@@ -903,21 +951,25 @@ export default function App() {
               Exit
             </button>
             {gameMode === BATTLE_MODE ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: '12px', flex: 1, minHeight: 0 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
+              <div style={{ display: 'flex', gap: '12px', flex: 1, minHeight: 0, height: '100%' }}>
+                <div style={{ flex: 4, display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, minHeight: 0 }}>
-                    <canvas ref={canvasRef} id="gameCanvas" style={{ maxWidth: '100%' }}></canvas>
+                    <canvas ref={canvasRef} id="gameCanvas" style={{ maxWidth: '100%', touchAction: 'none' }}></canvas>
                   </div>
                   <div className="game-stats">
                     <div className="stat-box">
                       <div className="stat-label">Players Alive</div>
                       <div className="stat-value">{battlePlayers?.filter((p) => p.alive).length || 0}</div>
                     </div>
+                    <button className="btn btn-secondary" onClick={() => setIsPaused(p => !p)} style={{ padding: '4px 12px', fontSize: '14px' }}>
+                      {isPaused ? '▶ Resume' : '⏸ Pause'}
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '100%', overflowY: 'auto' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', background: 'var(--card)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', textAlign: 'center', marginBottom: '4px' }}>Players</div>
                   {battlePlayers?.map((player) => (
-                    <div key={player.id} className="battle-panel">
+                    <div key={player.id} className="battle-panel" style={{ padding: '6px', fontSize: '11px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                         <div
                           style={{
@@ -927,14 +979,12 @@ export default function App() {
                             background: BATTLE_COLORS[player.id]?.hex,
                           }}
                         ></div>
-                        <div style={{ flex: 1, fontSize: '12px', fontWeight: 600 }}>P{player.id + 1}</div>
+                        <div style={{ flex: 1, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.id === 0 ? 'You' : 'AI'}</div>
                         {!player.alive && <div style={{ fontSize: '10px', color: 'var(--danger)' }}>OUT</div>}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                        Food: <span style={{ color: 'var(--ok)', fontWeight: 'bold' }}>{player.food}</span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                        Time: <span style={{ color: 'var(--warning)' }}>{player.timeRemaining}s</span>
+                      <div style={{ color: 'var(--muted)', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>🍎 {player.food}</span>
+                        <span style={{ color: 'var(--warning)' }}>⏳ {player.timeRemaining}</span>
                       </div>
                     </div>
                   ))}
@@ -946,7 +996,7 @@ export default function App() {
                   <h3>{gameMode === CLASSIC_MODE ? '🎮 Classic Mode' : '🏆 Ranked Mode'}</h3>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', flex: 1, minHeight: 0 }}>
-                  <canvas ref={canvasRef} id="gameCanvas" style={{ aspectRatio: '1/1', maxWidth: '600px', width: '100%' }}></canvas>
+                  <canvas ref={canvasRef} id="gameCanvas" style={{ aspectRatio: '1/1', maxWidth: '600px', width: '100%', touchAction: 'none' }}></canvas>
                   <div className="game-stats">
                     <div className="stat-box">
                       <div className="stat-label">Score</div>
@@ -959,6 +1009,9 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  <button className="btn btn-secondary" onClick={() => setIsPaused(p => !p)} style={{ width: '100%', maxWidth: '200px' }}>
+                    {isPaused ? '▶ Resume' : '⏸ Pause'}
+                  </button>
                 </div>
               </>
             )}
