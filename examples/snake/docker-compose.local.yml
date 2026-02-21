@@ -1,0 +1,7 @@
+version: "3.8"
+
+services:
+  snake:
+    command: node server.js --local-dev
+    ports:
+      - "3300:3300"
