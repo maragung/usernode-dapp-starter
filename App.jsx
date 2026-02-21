@@ -153,6 +153,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('ranked')
   const [submitting, setSubmitting] = useState(false)
   const [connected, setConnected] = useState(false)
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true)
 
   // Refs
   const canvasRef = useRef(null)
@@ -160,6 +161,7 @@ export default function App() {
   const timerRef = useRef(null)
   const battleInactivityRef = useRef({})
   const lastTapRef = useRef(0)
+  const touchStartRef = useRef(null)
 
   // ============ INITIALIZATION ============
   useEffect(() => {
@@ -206,6 +208,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to fetch leaderboard:', err)
+    } finally {
+      setIsLoadingLeaderboard(false)
     }
   }
 
@@ -555,14 +559,48 @@ export default function App() {
       lastTapRef.current = now
     }
 
+    const handleTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      }
+    }
+
+    const handleTouchMove = (e) => {
+      if (!touchStartRef.current || e.touches.length !== 1) {
+        return
+      }
+      e.preventDefault()
+
+      const touchEnd = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      const dx = touchEnd.x - touchStartRef.current.x
+      const dy = touchEnd.y - touchStartRef.current.y
+      const minSwipeDist = 20
+
+      if (Math.abs(dx) > minSwipeDist || Math.abs(dy) > minSwipeDist) {
+        let direction
+        if (Math.abs(dx) > Math.abs(dy)) {
+          direction = dx > 0 ? 'RIGHT' : 'LEFT'
+        } else {
+          direction = dy > 0 ? 'DOWN' : 'UP'
+        }
+        handleDirectionChange(direction)
+        touchStartRef.current = null
+      }
+    }
+
     document.addEventListener('keydown', handleKeyPress)
-    canvasRef.current?.addEventListener('click', handleCanvasDoubleTap)
+    const canvas = canvasRef.current
+    canvas?.addEventListener('click', handleCanvasDoubleTap)
+    canvas?.addEventListener('touchstart', handleTouchStart, { passive: false })
+    canvas?.addEventListener('touchmove', handleTouchMove, { passive: false })
 
     return () => {
       document.removeEventListener('keydown', handleKeyPress)
-      canvasRef.current?.removeEventListener('click', handleCanvasDoubleTap)
+      canvas?.removeEventListener('click', handleCanvasDoubleTap)
+      canvas?.removeEventListener('touchstart', handleTouchStart)
+      canvas?.removeEventListener('touchmove', handleTouchMove)
     }
-  }, [isPlaying, gameState])
+  }, [isPlaying, gameState, handleDirectionChange])
 
   const handleDirectionChange = useCallback((direction) => {
     if (!direction) return
@@ -815,12 +853,13 @@ export default function App() {
             <button className="btn btn-primary" onClick={() => setScreen('mode-select')}>
               Play Now
             </button>
-            <div style={{ marginTop: '20px', width: '100%' }}>
+            <div style={{ marginTop: '20px', width: '100%', maxHeight: '40vh', overflowY: 'auto' }}>
               <Leaderboard
                 leaderboard={leaderboard}
                 battleLeaderboard={battleLeaderboard}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
+                isLoading={isLoadingLeaderboard}
               />
             </div>
           </div>
@@ -951,6 +990,7 @@ export default function App() {
                 battleLeaderboard={battleLeaderboard}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
+                isLoading={isLoadingLeaderboard}
               />
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -976,7 +1016,7 @@ export default function App() {
 }
 
 // ============ LEADERBOARD COMPONENT ============
-function Leaderboard({ leaderboard, battleLeaderboard, activeTab, setActiveTab }) {
+function Leaderboard({ leaderboard, battleLeaderboard, activeTab, setActiveTab, isLoading }) {
   const displayBoard = activeTab === 'ranked' ? leaderboard : battleLeaderboard
 
   return (
@@ -991,7 +1031,24 @@ function Leaderboard({ leaderboard, battleLeaderboard, activeTab, setActiveTab }
       </div>
       <div className="leaderboard-title">{activeTab === 'ranked' ? '📊 Top Ranked Scores' : '⚔️ Top Battle Winners'}</div>
       <div className="leaderboard-list">
-        {displayBoard.length === 0 ? (
+        {isLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+            <div className="loading-spinner"></div>
+            <style>{`
+              .loading-spinner {
+                width: 24px;
+                height: 24px;
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                border-radius: 50%;
+                border-top-color: var(--accent, #6ea8fe);
+                animation: spin 1s linear infinite;
+              }
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        ) : displayBoard.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--muted)' }}>No scores yet. Be the first!</div>
         ) : (
           displayBoard.map((entry, idx) => (
