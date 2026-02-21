@@ -105,7 +105,7 @@
     
     .game-container {
       display: grid;
-      grid-template-columns: 6fr 4fr;
+      grid-template-columns: 60% 1fr;
       gap: 16px;
       flex: 1;
       min-height: 0;
@@ -743,51 +743,53 @@
           </div>
         </div>
         
-        <div class="card">
-          <div class="card-title">Profile</div>
-          <div class="profile-card">
-            <div class="profile-label">Address</div>
-            <div class="profile-value" id="myAddressEl">Not connected</div>
-            
-            <div class="profile-label" style="margin-top: 8px;">Username</div>
-            <div class="username-display" id="usernameDisplay">-</div>
-            <button class="btn-edit-username" id="editUsernameBtn">Edit</button>
-            
-            <div class="username-panel" id="usernamePanel">
-              <div class="input-username">
-                <input id="usernameInput" maxlength="24" placeholder="Enter name" />
-                <span class="input-suffix" id="usernameSuffix">_??????</span>
+        <div class="sidebar-row">
+          <div class="card">
+            <div class="card-title">Profile</div>
+            <div class="profile-card">
+              <div class="profile-label">Address</div>
+              <div class="profile-value" id="myAddressEl">Not connected</div>
+              
+              <div class="profile-label" style="margin-top: 8px;">Username</div>
+              <div class="username-display" id="usernameDisplay">-</div>
+              <button class="btn-edit-username" id="editUsernameBtn">Edit</button>
+              
+              <div class="username-panel" id="usernamePanel">
+                <div class="input-username">
+                  <input id="usernameInput" maxlength="24" placeholder="Enter name" />
+                  <span class="input-suffix" id="usernameSuffix">_??????</span>
+                </div>
+                <div class="btn-group">
+                  <button class="btn-save" id="saveUsernameBtn">Save</button>
+                  <button class="btn-cancel" id="cancelUsernameBtn">Cancel</button>
+                </div>
+                <div class="tx-progress hide" id="usernameTxProgress">
+                  <div class="tx-progress-fill"></div>
+                </div>
+                <div class="error-message" id="usernameError"></div>
               </div>
-              <div class="btn-group">
-                <button class="btn-save" id="saveUsernameBtn">Save</button>
-                <button class="btn-cancel" id="cancelUsernameBtn">Cancel</button>
-              </div>
-              <div class="tx-progress hide" id="usernameTxProgress">
-                <div class="tx-progress-fill"></div>
-              </div>
-              <div class="error-message" id="usernameError"></div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="card">
-          <div class="card-title">Personal Best</div>
-          <div class="stat-grid">
-            <div class="stat-item">
-              <div class="stat-label">Best Score</div>
-              <div class="stat-value" id="personalBest">0</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-label">Your Rank</div>
-              <div class="stat-value" id="myRank">-</div>
             </div>
           </div>
           
-          <div class="tx-progress hide" id="submitTxProgress">
-            <div class="tx-progress-fill"></div>
+          <div class="card">
+            <div class="card-title">Personal Best</div>
+            <div class="stat-grid">
+              <div class="stat-item">
+                <div class="stat-label">Best Score</div>
+                <div class="stat-value" id="personalBest">0</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Your Rank</div>
+                <div class="stat-value" id="myRank">-</div>
+              </div>
+            </div>
+            
+            <div class="tx-progress hide" id="submitTxProgress">
+              <div class="tx-progress-fill"></div>
+            </div>
+            <button class="btn-submit-score" id="submitScoreBtn">Submit Score</button>
+            <div class="error-message" id="profileError"></div>
           </div>
-          <button class="btn-submit-score" id="submitScoreBtn">Submit Score</button>
-          <div class="error-message" id="profileError"></div>
         </div>
         
         <div class="card">
