@@ -1,2 +1,8 @@
-.env
-node_modules/
+# Examples
+examples/snake/index.html
+
+Wait, I need to reconsider this. The file 'examples/snake/index.html' is a source file that was modified, not a build artifact or temporary file. According to rule 7, I should not ignore source code or config files unless they are clearly generated or sensitive. Since this appears to be a regular HTML source file, it should NOT be added to .gitignore.
+
+Actually, looking at the change list again, there are no build artifacts, dependencies, or temp files - only a source file (index.html) was modified. According to rule 6, if the change list contains only source or config files and no build artifacts, dependencies, or temp files, I should output an empty .gitignore.
+
+(empty)

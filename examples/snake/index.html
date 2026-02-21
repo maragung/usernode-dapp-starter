@@ -764,6 +764,31 @@
      * Generates random session times and manages game scheduling queues
      * Prevents overlapping sessions and enables queue joining for future sessions
      */
+    
+    // Get today's date for daily challenge
+    function getTodayDate() {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    }
+    
+    // Daily challenge seed generator
+    function getDailySeed() {
+      const dateStr = getTodayDate();
+      let seed = 0;
+      for (let i = 0; i < dateStr.length; i++) {
+        seed = (seed * 31 + dateStr.charCodeAt(i)) >>> 0;
+      }
+      return seed;
+    }
+    
+    // Seeded random number generator for daily challenges
+    function seededRandom(seed) {
+      let s = seed >>> 0;
+      return function() {
+        s = (s * 1664525 + 1013904223) >>> 0;
+        return (s & 0x7fffffff) / 0x80000000;
+      };
+    }
 
     async function fetchSchedules(mode) {
       try {
@@ -821,6 +846,18 @@
     function isScheduleAvailable(scheduleId, queuedSet) {
       if (queuedSet.size > 0 && !queuedSet.has(scheduleId)) return false;
       return !queuedSet.has(scheduleId);
+    }
+
+    // Check if player can join battle schedule (max 1 at a time)
+    function canJoinBattleSchedule(queuedSet) {
+      // Player can only join one battle schedule at a time
+      return queuedSet.size === 0;
+    }
+
+    // Check if player can join ranked schedule (max 1 per 4 hours)
+    function canJoinRankedSchedule(queuedSet) {
+      // Player can only play ranked once per schedule slot (every 4 hours)
+      return queuedSet.size === 0;
     }
 
     let _pbRaf = null, _pbStart = 0;
@@ -953,6 +990,17 @@
         return () => clearInterval(t);
       }, []);
 
+      // Update schedule times every second to keep countdown accurate
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setSchedules(prevSchedules => {
+            if (!prevSchedules) return prevSchedules;
+            return prevSchedules.map(sch => ({ ...sch }));
+          });
+        }, 1000);
+        return () => clearInterval(interval);
+      }, []);
+
       const fetchBoards = async () => {
         try {
           const res = await fetch('/__snake/leaderboard');
@@ -1053,6 +1101,34 @@
         setScore(0);
       };
 
+      // Server log display function
+      const displayServerLog = (logMessage, type = 'info') => {
+        const logDiv = document.createElement('div');
+        logDiv.style.cssText = `
+          position: fixed;
+          bottom: 10px;
+          right: 10px;
+          background: rgba(0, 0, 0, 0.8);
+          color: white;
+          padding: 10px 15px;
+          border-radius: 5px;
+          font-size: 12px;
+          z-index: 1000;
+          max-width: 300px;
+          word-break: break-word;
+        `;
+        
+        logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${logMessage}`;
+        document.body.appendChild(logDiv);
+        
+        // Remove after 5 seconds
+        setTimeout(() => {
+          if (document.body.contains(logDiv)) {
+            document.body.removeChild(logDiv);
+          }
+        }, 5000);
+      };
+
       const initBattle = () => {
         const playerSnake = [{ x: 10, y: 10 }, { x: 9, y: 10 }];
         const battlePlayers = [{
@@ -1091,6 +1167,16 @@
       };
 
       const joinSchedule = (scheduleId) => {
+        // Check if player can join based on mode
+        if (mode === BATTLE && !canJoinBattleSchedule(queuedSchedules)) {
+          alert('You can only join one battle session at a time');
+          return;
+        }
+        if (mode === RANKED && !canJoinRankedSchedule(queuedSchedules)) {
+          alert('You can only play ranked once per schedule slot (every 4 hours)');
+          return;
+        }
+        
         if (queuedSchedules.size > 0 && !queuedSchedules.has(scheduleId)) return;
         setQueuedSchedules(prev => new Set([...prev, scheduleId]));
         setSelectedSchedule(scheduleId);
@@ -1419,6 +1505,12 @@
           startProgressBar();
           await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
           completeProgressBar();
+          
+          // Display server log for ranked mode
+          if (mode === RANKED) {
+            displayServerLog(`Ranked game submitted: Score ${mode === BATTLE ? food : score}`, 'ranked');
+          }
+          
           setTimeout(() => {
             setScreen('game-over');
             setSubmitting(false);
