@@ -4,6 +4,7 @@ function createSnakeGame(opts = {}) {
   const state = {
     scores: [], // Array to store ranked scores
     battleScores: [], // Array to store battle victories
+    dailyScores: [], // Array to store daily challenge scores
     usernames: {}, // Map of pubkey to username
     dailySubmissionCount: new Map(), // Track daily ranked submissions per sender
     dailyBattleCount: new Map(), // Track daily battle participations per sender
@@ -78,7 +79,7 @@ function createSnakeGame(opts = {}) {
     }
 
     // Check if ranked mode
-    if (mode === "ranked") {
+    if (mode === "ranked" || mode === "daily") {
       const dailyKey = `${sender}_${new Date(timestamp).toDateString()}`;
       const count = state.dailySubmissionCount.get(dailyKey) || 0;
 
@@ -116,6 +117,30 @@ function createSnakeGame(opts = {}) {
       state.scores = state.scores.slice(0, 100);
     }
 
+    // Add to daily leaderboard
+    if (mode === "daily") {
+      const username = state.usernames[sender] || `user_${sender.slice(-6)}`;
+      
+      // Filter for today's scores only
+      const today = new Date().toDateString();
+      state.dailyScores = state.dailyScores.filter(s => new Date(s.timestamp).toDateString() === today);
+
+      const existingScore = state.dailyScores.find((s) => s.address === sender);
+      if (existingScore && existingScore.score >= score) {
+        return true;
+      }
+
+      state.dailyScores = state.dailyScores.filter((s) => s.address !== sender);
+      state.dailyScores.push({
+        address: sender,
+        username: username,
+        score: score,
+        timestamp: timestamp,
+        txId: tx.id,
+      });
+      state.dailyScores.sort((a, b) => b.score - a.score);
+    }
+
     return true;
   }
 
@@ -151,10 +176,20 @@ function createSnakeGame(opts = {}) {
     return state.battleScores;
   }
 
+  function getDailyLeaderboard() {
+    return state.dailyScores;
+  }
+
+  function getUsername(address) {
+    return state.usernames[address] || null;
+  }
+
   return {
     processTransaction,
     getLeaderboard,
     getBattleLeaderboard,
+    getDailyLeaderboard,
+    getUsername,
   };
 }
 

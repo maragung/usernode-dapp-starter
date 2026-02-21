@@ -168,6 +168,8 @@ export default function App() {
   // Screen state
   const [screen, setScreen] = useState('welcome')
   const [gameMode, setGameMode] = useState(null)
+  const [schedules, setSchedules] = useState([])
+  const [waitingInfo, setWaitingInfo] = useState(null)
 
   // Game state
   const [gameState, setGameState] = useState(null)
@@ -191,6 +193,8 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false)
   const [connected, setConnected] = useState(false)
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true)
+  const [editingName, setEditingName] = useState(false)
+  const [tempName, setTempName] = useState('')
 
   // Refs
   const canvasRef = useRef(null)
@@ -198,6 +202,7 @@ export default function App() {
   const timerRef = useRef(null)
   const battleInactivityRef = useRef({})
   const touchStartRef = useRef(null)
+  const wsRef = useRef(null)
 
   // ============ INITIALIZATION ============
   useEffect(() => {
@@ -233,6 +238,24 @@ export default function App() {
     localStorage.removeItem('snake:user_address')
   }
 
+  const updateNickname = async () => {
+    if (!tempName.trim()) return
+    setSubmitting(true)
+    startProgressBar()
+    try {
+      const memo = JSON.stringify({ app: 'snake', type: 'set_username', username: tempName.trim() })
+      await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS)
+      localStorage.setItem('snake:username', tempName.trim())
+      setEditingName(false)
+      completeProgressBar()
+    } catch (err) {
+      console.error(err)
+      stopProgressBar()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   // ============ LEADERBOARD ============
   const fetchLeaderboards = async () => {
     try {
@@ -246,6 +269,16 @@ export default function App() {
       console.error('Failed to fetch leaderboard:', err)
     } finally {
       setIsLoadingLeaderboard(false)
+    }
+  }
+
+  const fetchSchedules = async (mode) => {
+    try {
+      const res = await fetch(`/__schedule?mode=${mode}`)
+      const data = await res.json()
+      setSchedules(data.schedules || [])
+    } catch (e) {
+      console.error("Failed to fetch schedules", e)
     }
   }
 
@@ -327,6 +360,52 @@ export default function App() {
     }
     setIsPlaying(true)
     setScreen('playing')
+  }
+
+  const joinSchedule = (schedule) => {
+    if (!userAddress) {
+      alert("Please connect wallet first")
+      return
+    }
+
+    // Setup WebSocket for waiting room
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${protocol}//${window.location.host}/__battle`)
+    
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: 'join_schedule',
+        scheduleId: schedule.id,
+        mode: gameMode,
+        playerId: userAddress
+      }))
+    }
+
+    ws.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data)
+      if (msg.type === 'joined_schedule') {
+        setWaitingInfo({ schedule, playerCount: 1 })
+        setScreen('waiting-room')
+      } else if (msg.type === 'schedule_state') {
+        setWaitingInfo(prev => ({ ...prev, playerCount: msg.players.length }))
+      } else if (msg.type === 'game_started') {
+        ws.close()
+        startGame(gameMode)
+      } else if (msg.type === 'error') {
+        alert(msg.message)
+        ws.close()
+      }
+    }
+
+    wsRef.current = ws
+  }
+
+  const leaveWaitingRoom = () => {
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+    setScreen('mode-select')
   }
 
   // ============ GAME LOOP (CLASSIC/RANKED) ============
@@ -882,6 +961,21 @@ export default function App() {
                 <div className="wallet-info">
                   <div className="wallet-address">
                     {userAddress.slice(0, 5)}...{userAddress.slice(-6)}
+                    {editingName ? (
+                      <div style={{display:'flex', gap:'4px'}}>
+                        <input 
+                          value={tempName} 
+                          onChange={e => setTempName(e.target.value)}
+                          placeholder="Nickname"
+                          style={{width:'80px', padding:'2px'}}
+                        />
+                        <button onClick={updateNickname} disabled={submitting}>💾</button>
+                      </div>
+                    ) : (
+                      <span onClick={() => { setTempName(localStorage.getItem('snake:username') || ''); setEditingName(true); }} style={{cursor:'pointer', borderBottom:'1px dashed #666'}}>
+                        {localStorage.getItem('snake:username') || userAddress.slice(0, 5) + '...'} ✎
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button className="btn btn-secondary" onClick={disconnectWallet}>
@@ -922,6 +1016,41 @@ export default function App() {
                   <div className="mode-icon">🎮</div>
                   <div className="mode-title">Classic</div>
                   <div className="mode-description">No time limit, no score saved</div>
+              {!gameMode ? (
+                <>
+                  <h2 style={{ marginBottom: '24px' }}>Select Game Mode</h2>
+                  <div className="game-modes">
+                    <div className="mode-card" onClick={() => startGame(CLASSIC_MODE)}>
+                      <div className="mode-icon">🎮</div>
+                      <div className="mode-title">Classic</div>
+                      <div className="mode-description">No time limit, no score saved</div>
+                    </div>
+                    <div className="mode-card" onClick={() => { setGameMode(RANKED_MODE); fetchSchedules(RANKED_MODE); }}>
+                      <div className="mode-icon">🏆</div>
+                      <div className="mode-title">Ranked</div>
+                      <div className="mode-description">Compete in scheduled sessions</div>
+                    </div>
+                    <div className="mode-card" onClick={() => { setGameMode(BATTLE_MODE); fetchSchedules(BATTLE_MODE); }}>
+                      <div className="mode-icon">⚔️</div>
+                      <div className="mode-title">Battle</div>
+                      <div className="mode-description">Multiplayer scheduled battles</div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ width: '100%', maxWidth: '400px' }}>
+                  <h3>Select Schedule ({gameMode})</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px', maxHeight: '300px', overflowY: 'auto' }}>
+                    {schedules.map(s => (
+                      <div key={s.id} className="battle-panel" style={{ cursor: 'pointer', justifyContent: 'space-between' }} onClick={() => joinSchedule(s)}>
+                        <span>🕒 {s.displayTime}</span>
+                        <span>👤 {s.playerCount} Players</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="btn btn-secondary" onClick={() => setGameMode(null)} style={{ marginTop: '20px' }}>
+                    Back
+                  </button>
                 </div>
                 <div className="mode-card" onClick={() => startGame(RANKED_MODE)}>
                   <div className="mode-icon">🏆</div>
@@ -934,12 +1063,31 @@ export default function App() {
                   <div className="mode-description">5 Player Multiplayer</div>
                 </div>
               </div>
+              )}
               <button
                 className="btn btn-secondary"
                 onClick={() => setScreen('welcome')}
                 style={{ marginTop: '24px' }}
+                style={{ marginTop: '12px', display: gameMode ? 'none' : 'inline-block' }}
               >
                 Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {screen === 'waiting-room' && (
+          <div className="screen" style={{ justifyContent: 'center', alignItems: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <h2>Waiting Room</h2>
+              <div style={{ fontSize: '48px', margin: '20px 0' }}>⏳</div>
+              <p>Waiting for schedule: {waitingInfo?.schedule.displayTime}</p>
+              <p>Players joined: {waitingInfo?.playerCount}</p>
+              <p style={{ color: 'var(--muted)', fontSize: '14px', marginTop: '20px' }}>
+                Game will start automatically...
+              </p>
+              <button className="btn btn-secondary" onClick={leaveWaitingRoom} style={{ marginTop: '30px' }}>
+                Leave
               </button>
             </div>
           </div>

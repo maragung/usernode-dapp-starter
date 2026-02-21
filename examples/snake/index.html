@@ -2,11 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>Snake Game</title>
   <script src="/usernode-bridge.js"></script>
   
-  <!-- React & Babel via CDN -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -29,67 +28,182 @@
     * {
       box-sizing: border-box;
       user-select: none;
+      -webkit-user-select: none;
       -webkit-tap-highlight-color: transparent;
+      margin: 0;
+      padding: 0;
     }
 
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg);
       color: var(--fg);
-      height: 100vh;
       overflow: hidden;
+      position: fixed;
     }
 
     .container {
       display: flex;
       flex-direction: column;
+      width: 100vw;
       height: 100vh;
-      max-width: 600px;
-      margin: 0 auto;
-      background: var(--bg);
-      position: relative;
+      height: 100dvh;
     }
 
-    /* Header */
+    /** PC Split-Screen Layout **/
+    @media (min-width: 1024px) {
+      .game-layout {
+        display: flex;
+        gap: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .game-canvas-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-right: 1px solid var(--border);
+      }
+
+      .game-info-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 16px;
+        gap: 16px;
+      }
+
+      .game-info-panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        padding: 16px;
+        border-radius: 12px;
+      }
+    }
+
+    /** Mobile - Full canvas **/
+    @media (max-width: 1023px) {
+      .game-layout {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+      }
+
+      .game-canvas-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .game-info-section {
+        display: none;
+      }
+
+      .game-stats-mobile {
+        display: flex;
+        justify-content: space-around;
+        padding: 8px 12px;
+        background: var(--card);
+        border-top: 1px solid var(--border);
+        font-size: 12px;
+        gap: 12px;
+      }
+
+      .stat-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+
+      .stat-value {
+        font-weight: 700;
+        font-size: 16px;
+        color: var(--accent);
+      }
+
+      .stat-label {
+        color: var(--muted);
+        font-size: 10px;
+      }
+    }
+
+    /* Minimal Header */
     .header {
-      padding: 16px;
+      flex: 0 0 auto;
+      padding: 8px 12px;
       background: var(--card);
       border-bottom: 1px solid var(--border);
       z-index: 10;
-    }
-
-    .header-content {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
     }
 
     .logo {
       font-weight: 800;
-      font-size: 18px;
+      font-size: 14px;
       background: linear-gradient(135deg, #6EA8FE 0%, #A78BFA 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      white-space: nowrap;
     }
 
-    .wallet-info {
+    .header-right {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .wallet-badge {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
+      gap: 4px;
+      font-size: 10px;
       background: rgba(255, 255, 255, 0.05);
       padding: 4px 8px;
-      border-radius: 12px;
+      border-radius: 6px;
       border: 1px solid var(--border);
-    }
-
-    .wallet-address {
       font-family: monospace;
       color: var(--muted);
     }
 
-    /* Content Area */
+    .btn {
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      touch-action: manipulation;
+      background: rgba(99, 102, 241, 0.2);
+      color: var(--accent);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+    }
+
+    .btn:active {
+      background: rgba(99, 102, 241, 0.4);
+    }
+
+    /* Main Content */
     .content {
       flex: 1;
       position: relative;
@@ -102,67 +216,23 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      padding: 20px;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       animation: fadeIn 0.3s ease;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    /* Buttons */
-    .btn {
-      border: none;
-      padding: 12px 24px;
-      border-radius: 12px;
-      font-weight: 600;
-      font-size: 16px;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: var(--primary-hover);
-      transform: translateY(-1px);
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.1);
-      color: var(--fg);
-      font-size: 14px;
-      padding: 8px 16px;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.15);
-    }
-
-    /* Welcome Screen */
+    /* Welcome */
     .welcome-screen {
       align-items: center;
       justify-content: center;
       text-align: center;
+      padding: 20px;
     }
 
     .welcome-title {
-      font-size: 42px;
+      font-size: 44px;
       font-weight: 900;
       margin-bottom: 12px;
       background: linear-gradient(135deg, #6EA8FE 0%, #A78BFA 100%);
@@ -170,1436 +240,1431 @@
       -webkit-text-fill-color: transparent;
     }
 
-    .welcome-subtitle {
+    .welcome-text {
       color: var(--muted);
-      margin-bottom: 32px;
-      max-width: 280px;
-      line-height: 1.5;
+      margin-bottom: 24px;
+      font-size: 14px;
     }
 
-    /* Mode Select */
-    .game-modes {
-      display: grid;
+    .mode-select-screen {
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
       gap: 16px;
+    }
+
+    .modes-grid {
+      display: grid;
+      gap: 12px;
       width: 100%;
+      max-width: 480px;
     }
 
     .mode-card {
       background: var(--card);
       border: 1px solid var(--border);
-      padding: 16px;
-      border-radius: 16px;
+      padding: 18px;
+      border-radius: 12px;
       cursor: pointer;
       transition: all 0.2s;
       text-align: left;
+    }
+
+    .mode-card:active { transform: scale(0.97); }
+
+    .mode-card:hover {
+      border-color: var(--accent);
+      background: rgba(110, 168, 254, 0.05);
+    }
+
+    .mode-icon { font-size: 32px; margin-bottom: 6px; }
+    .mode-title { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
+    .mode-desc { font-size: 13px; color: var(--muted); }
+
+    /** Schedule Selection Screen **/
+    .schedule-screen {
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .schedule-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .schedule-title {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      color: var(--fg);
+    }
+
+    .schedule-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .schedule-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .schedule-slot {
+      background: var(--card);
+      border: 2px solid var(--border);
+      padding: 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .schedule-slot:active { transform: scale(0.95); }
+
+    .schedule-slot:hover {
+      border-color: var(--accent);
+      background: rgba(110, 168, 254, 0.05);
+    }
+
+    .schedule-slot.available {
+      border-color: var(--ok);
+      background: rgba(93, 211, 158, 0.05);
+    }
+
+    .schedule-slot.available:hover {
+      border-color: var(--ok);
+      background: rgba(93, 211, 158, 0.15);
+    }
+
+    .schedule-slot.queued {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.1);
+    }
+
+    .schedule-time {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--accent);
+    }
+
+    .schedule-status {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .schedule-status.available {
+      color: var(--ok);
+    }
+
+    .schedule-status.queued {
+      color: var(--primary);
+    }
+
+    .schedule-queued-text {
+      font-size: 10px;
+      color: var(--primary);
+      margin-top: 2px;
+    }
+
+    /* Game Screen - MAXIMIZED */
+    .game-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .game-canvas-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      min-height: 0;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      border: none;
+      box-shadow: none;
+    }
+
+    .game-overlay {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      display: flex;
+      gap: 8px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .game-stat {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+
+    .stat-label {
+      font-size: 8px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 16px;
+      color: var(--accent);
+    }
+
+    .exit-btn {
+      position: absolute;
+      bottom: 6px;
+      right: 6px;
+      background: rgba(255, 107, 107, 0.1);
+      color: var(--danger);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 15;
+      pointer-events: auto;
+      touch-action: manipulation;
+    }
+
+    .exit-btn:active {
+      background: rgba(255, 107, 107, 0.2);
+    }
+
+    /* Battle Panel */
+    .battle-panel {
+      position: absolute;
+      top: 40px;
+      right: 6px;
+      width: 100px;
+      max-height: calc(100% - 50px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      z-index: 10;
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
 
-    .mode-card:hover {
-      border-color: var(--accent);
-      background: rgba(110, 168, 254, 0.05);
-      transform: translateY(-2px);
+    .player-card {
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 10px;
+      flex-shrink: 0;
     }
 
-    .mode-icon {
-      font-size: 24px;
-      margin-bottom: 8px;
-    }
-
-    .mode-title {
-      font-weight: 700;
-      font-size: 18px;
-    }
-
-    .mode-description {
-      font-size: 13px;
-      color: var(--muted);
-    }
-
-    /* Game Container */
-    .game-container {
-      align-items: center;
-      justify-content: center;
-      padding: 12px;
-    }
-
-    canvas {
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      background: #0b0f16;
-      touch-action: none;
-    }
-
-    .exit-button {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      background: rgba(255, 107, 107, 0.15);
-      color: var(--danger);
-      border: 1px solid rgba(255, 107, 107, 0.3);
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      z-index: 20;
-    }
-
-    .game-stats {
-      display: flex;
-      gap: 12px;
-      width: 100%;
-      max-width: 600px;
-    }
-
-    .stat-box {
-      flex: 1;
-      background: var(--card);
-      border: 1px solid var(--border);
-      padding: 12px;
-      border-radius: 12px;
-      text-align: center;
-    }
-
-    .stat-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--muted);
-      margin-bottom: 4px;
-    }
-
-    .stat-value {
-      font-size: 20px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-
-    /* Battle Panel */
-    .battle-panel {
-      background: var(--card);
-      border: 1px solid var(--border);
-      padding: 8px;
-      border-radius: 8px;
-    }
-
-    /* Game Over */
-    .game-over-screen {
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-    }
-
-    .game-over-title {
-      font-size: 32px;
-      font-weight: 800;
-      color: var(--fg);
-    }
-
-    .game-over-score {
-      font-size: 64px;
-      font-weight: 900;
-      color: var(--accent);
-      margin: 16px 0 32px;
-      text-shadow: 0 0 30px rgba(110, 168, 254, 0.3);
-    }
-
-    /* Leaderboard */
-    .leaderboard-container {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      max-height: 400px;
-    }
-
-    .leaderboard-tabs {
-      display: flex;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .tab-btn {
-      flex: 1;
-      background: transparent;
-      border: none;
-      padding: 12px;
-      color: var(--muted);
-      font-weight: 600;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-    }
-
-    .tab-btn.active {
-      color: var(--fg);
-      border-bottom-color: var(--accent);
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .leaderboard-title {
-      padding: 12px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-      text-align: center;
-      background: rgba(0, 0, 0, 0.2);
-    }
-
-    .leaderboard-list {
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .leaderboard-item {
+    .player-row {
       display: flex;
       align-items: center;
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--border);
-      gap: 12px;
+      gap: 4px;
+      margin-bottom: 2px;
     }
 
-    .leaderboard-rank {
-      width: 24px;
-      font-weight: 700;
-      text-align: center;
+    .player-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      flex-shrink: 0;
     }
 
-    .rank-1, .rank-2, .rank-3 { font-size: 18px; }
-
-    .leaderboard-player {
+    .player-name {
       flex: 1;
-      overflow: hidden;
-    }
-
-    .leaderboard-name {
       font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .leaderboard-addr {
+    .player-status {
+      font-size: 8px;
+      color: var(--danger);
+    }
+
+    .player-stat-line {
+      font-size: 9px;
+      color: var(--muted);
+    }
+
+    /* Progress Bar */
+    .tx-progress {
+      position: absolute;
+      bottom: 4px;
+      left: 4px;
+      right: 4px;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      z-index: 20;
+    }
+
+    .tx-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.4s ease-out, background-color 0.4s ease;
+      border-radius: 3px;
+    }
+
+    .tx-fill.ok { background: var(--ok); }
+    .tx-fill.warn { background: var(--warning); }
+    .tx-fill.err { background: var(--danger); }
+
+    /* Game Over */
+    .game-over-screen {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .game-over-score {
+      font-size: 64px;
+      font-weight: 900;
+      color: var(--accent);
+      margin: 16px 0;
+      text-shadow: 0 0 30px rgba(110, 168, 254, 0.3);
+    }
+
+    .leaderboard {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      width: 100%;
+      max-width: 480px;
+      max-height: 40vh;
+      display: flex;
+      flex-direction: column;
+      margin: 12px 0;
+    }
+
+    .lb-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .lb-tab {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 10px;
+      color: var(--muted);
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 12px;
+      border-bottom: 2px solid transparent;
+      touch-action: manipulation;
+    }
+
+    .lb-tab.active {
+      color: var(--fg);
+      border-bottom-color: var(--accent);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .lb-list {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      flex: 1;
+    }
+
+    .lb-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .lb-rank {
+      width: 20px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .lb-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .lb-name {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lb-addr {
       font-size: 10px;
       color: var(--muted);
       font-family: monospace;
     }
 
-    .leaderboard-score {
+    .lb-score {
       font-weight: 700;
       color: var(--accent);
+      flex-shrink: 0;
     }
-
-    .leaderboard-time {
-      font-size: 10px;
-      color: var(--muted);
-      width: 60px;
-      text-align: right;
-    }
-
-    /* Progress Bar */
-    .tx-progress { width: 100%; margin: 8px 0 4px; }
-    .tx-progress-track { width: 100%; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
-    .tx-progress-fill { height: 100%; width: 0%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease-out, background-color 0.4s ease; }
-    .tx-progress-fill.ok { background: var(--ok); }
-    .tx-progress-fill.warn { background: var(--warning); }
-    .tx-progress-fill.err { background: var(--danger); }
-    .tx-progress-label { font-size: 12px; color: var(--muted); margin-top: 4px; text-align: center; }
-    .tx-progress-label.warn { color: var(--warning); }
-    .tx-progress-label.err { color: var(--danger); }
-    .hide { display: none; }
 
     /* Modal */
     .modal-overlay {
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 100;
+      z-index: 200;
       backdrop-filter: blur(4px);
+      padding: 16px;
+    }
+
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 420px;
+      max-height: 85vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       padding: 20px;
     }
 
-    .modal-content {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 24px;
-      width: 100%;
-      max-width: 400px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-    }
-
-    .modal-header {
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 16px;
-      margin-bottom: 16px;
     }
 
-    .modal-header h2 {
-      margin: 0;
-    }
-
-    .close-button {
+    .modal-close {
       background: none;
       border: none;
       font-size: 24px;
       color: var(--muted);
       cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .modal-body {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .modal-body h3 {
+      font-size: 14px;
+      margin: 12px 0 6px;
+      color: var(--fg);
+    }
+
+    .modal-body p {
+      margin: 6px 0;
     }
 
     .modal-body ul {
-      padding-left: 20px;
+      padding-left: 16px;
+      margin: 6px 0;
+    }
+
+    .modal-body li {
+      margin: 4px 0;
+    }
+
+    .modal-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    @media (min-width: 800px) {
+      .header {
+        padding: 10px 16px;
+      }
+
+      .logo {
+        font-size: 16px;
+      }
+
+      .btn {
+        font-size: 13px;
+        padding: 10px 16px;
+      }
+
+      .welcome-title {
+        font-size: 52px;
+      }
+
+      .stat-value {
+        font-size: 18px;
+      }
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
+  
   <script type="text/babel">
     const { useState, useRef, useEffect, useCallback } = React;
 
-    // ============ CONSTANTS ============
-    const GRID_SIZE = 20
-    const GAME_LOOP_INTERVAL = 200
-    const CLASSIC_MODE = 'classic'
-    const RANKED_MODE = 'ranked'
-    const BATTLE_MODE = 'battle'
+    const GRID_SIZE = 20;
+    const GAME_LOOP_INTERVAL = 200;
+    const CLASSIC = 'classic';
+    const RANKED = 'ranked';
+    const BATTLE = 'battle';
+    const BATTLE_COLORS = ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4d96ff', '#c74ce6'];
 
-    const RANKED_TIME_LIMITS = [30, 60, 90, 120, 180, 300, 600, 900, 1200, 1500, 1800]
-    const BATTLE_COLORS = [
-      { name: 'Red', hex: '#ff6b6b' },
-      { name: 'Yellow', hex: '#ffd93d' },
-      { name: 'Green', hex: '#6bcf7f' },
-      { name: 'Blue', hex: '#4d96ff' },
-      { name: 'Purple', hex: '#c74ce6' },
-    ]
-    const BATTLE_MAX_PLAYERS = 5
-    const BATTLE_INACTIVITY_TIMEOUT = 3 * 60 * 1000
+    const APP_PUBKEY = localStorage.getItem('snake:app_pubkey') || 'ut1zvhmxlhmv95cgzaph6cpv0rrcrn29gr4xkdj9fuykc6648hmvgksmkfua6';
+    const TX_SEND_OPTS = { timeoutMs: 90000, pollIntervalMs: 1500 };
+    const TX_PB_EXPECTED_S = 30, TX_PB_WARN_S = 45, TX_PB_ERR_S = 90;
 
-    const APP_PUBKEY = localStorage.getItem('snake:app_pubkey') || 
-      'ut1zvhmxlhmv95cgzaph6cpv0rrcrn29gr4xkdj9fuykc6648hmvgksmkfua6'
+    /**
+     * Schedule Management System
+     * Generates random session times and manages game scheduling queues
+     * Prevents overlapping sessions and enables queue joining for future sessions
+     */
 
-    const TX_SEND_OPTS = { timeoutMs: 90000, pollIntervalMs: 1500 }
-    const TX_PB_EXPECTED_S = 30
-    const TX_PB_WARN_S = 45
-    const TX_PB_ERR_S = 90
-
-    // ============ PROGRESS BAR HELPERS ============
-    let _pbRaf = null
-    let _pbStart = 0
-
-    function pbPercent(s) {
-      if (s <= TX_PB_EXPECTED_S) {
-        const t = s / TX_PB_EXPECTED_S
-        return 95 * (1 - Math.pow(1 - t, 3))
+    async function fetchSchedules(mode) {
+      try {
+        const resp = await fetch(`/__schedule?mode=${encodeURIComponent(mode)}`);
+        const data = await resp.json();
+        return (data.schedules || []).sort((a, b) => a.startTime - b.startTime);
+      } catch (e) {
+        // fallback to client-side generation if server unreachable
+        const now = new Date();
+        const schedules = [];
+        let t = now.getTime();
+        for (let i = 0; i < 6; i++) {
+          if (mode === BATTLE) {
+            const offset = (3 + Math.random() * 2) * 3600 * 1000;
+            t += offset;
+          } else {
+            t += 4 * 60 * 60 * 1000;
+          }
+          schedules.push({
+            id: `${mode}_${i}`,
+            startTime: t,
+            displayTime: new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            players: 0,
+            status: t <= now.getTime() ? 'active' : 'waiting'
+          });
+        }
+        return schedules;
       }
-      return 95 + 5 * (1 - Math.exp(-(s - TX_PB_EXPECTED_S) / 120))
     }
 
-    function pbApply(pct, s) {
-      const el = document.getElementById('txProgress')
-      if (!el) return
-      const fill = el.querySelector('.tx-progress-fill')
-      const label = el.querySelector('.tx-progress-label')
-      if (fill) {
-        fill.style.width = pct + '%'
-        fill.className = 'tx-progress-fill' + (s >= TX_PB_ERR_S ? ' err' : s >= TX_PB_WARN_S ? ' warn' : '')
-      }
-      if (label) {
-        if (s >= TX_PB_ERR_S) {
-          label.textContent = 'Taking longer than expected; check Discord'
-          label.className = 'tx-progress-label err'
-        } else if (s >= TX_PB_WARN_S) {
-          label.textContent = 'Taking longer than expected'
-          label.className = 'tx-progress-label warn'
-        } else {
-          label.textContent = 'Submitting score...'
-          label.className = 'tx-progress-label'
-        }
-      }
+    function formatScheduleTime(timestamp) {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffMs = timestamp - now.getTime();
+      const diffMins = Math.ceil(diffMs / 60000);
+
+      if (diffMins <= 0) return 'Starting now';
+      if (diffMins < 2) return 'Starting soon';
+      if (diffMins < 60) return `In ${diffMins} min`;
+
+      const hours = Math.floor(diffMins / 60);
+      const mins = diffMins % 60;
+      return `${hours}h ${mins}m`;
+    }
+
+    function isScheduleAvailable(scheduleId, queuedSet) {
+      if (queuedSet.size > 0 && !queuedSet.has(scheduleId)) return false;
+      return !queuedSet.has(scheduleId);
+    }
+
+    let _pbRaf = null, _pbStart = 0;
+
+    function pbPercent(s) {
+      if (s <= TX_PB_EXPECTED_S) return 95 * (1 - Math.pow(1 - s / TX_PB_EXPECTED_S, 3));
+      return 95 + 5 * (1 - Math.exp(-(s - TX_PB_EXPECTED_S) / 120));
+    }
+
+    function pbApply(pct) {
+      const pb = document.getElementById('txProgress');
+      if (!pb) return;
+      const fill = pb.querySelector('.tx-fill');
+      if (fill) fill.style.width = pct + '%';
     }
 
     function startProgressBar() {
-      const el = document.getElementById('txProgress')
-      if (el) {
-        el.classList.remove('hide')
-        const f = el.querySelector('.tx-progress-fill')
-        const l = el.querySelector('.tx-progress-label')
-        if (f) {
-          f.style.width = '0%'
-          f.className = 'tx-progress-fill'
-        }
-        if (l) {
-          l.textContent = 'Submitting score...'
-          l.className = 'tx-progress-label'
-        }
-      }
-      _pbStart = performance.now()
+      const pb = document.getElementById('txProgress');
+      if (!pb) return;
+      pb.classList.remove('hide');
+      _pbStart = performance.now();
       (function tick() {
-        const s = (performance.now() - _pbStart) / 1000
-        pbApply(pbPercent(s), s)
-        _pbRaf = requestAnimationFrame(tick)
-      })()
+        const s = (performance.now() - _pbStart) / 1000;
+        pbApply(pbPercent(s));
+        _pbRaf = requestAnimationFrame(tick);
+      })();
     }
 
     function completeProgressBar() {
-      if (_pbRaf) {
-        cancelAnimationFrame(_pbRaf)
-        _pbRaf = null
-      }
-      const el = document.getElementById('txProgress')
-      if (!el) return
-      const f = el.querySelector('.tx-progress-fill')
-      const l = el.querySelector('.tx-progress-label')
-      if (f) {
-        f.className = 'tx-progress-fill ok'
-        f.style.width = '100%'
-      }
-      if (l) {
-        l.textContent = 'Score submitted!'
-        l.className = 'tx-progress-label'
-      }
-      setTimeout(() => el.classList.add('hide'), 1200)
-    }
-
-    function stopProgressBar() {
-      if (_pbRaf) {
-        cancelAnimationFrame(_pbRaf)
-        _pbRaf = null
+      if (_pbRaf) cancelAnimationFrame(_pbRaf);
+      const pb = document.getElementById('txProgress');
+      if (pb) {
+        pb.querySelector('.tx-fill').style.width = '100%';
+        pb.querySelector('.tx-fill').className = 'tx-fill ok';
       }
     }
 
-    // ============ HELPER FUNCTIONS ============
-    function getMedalEmoji(rank) {
-      if (rank === 1) return '🥇'
-      if (rank === 2) return '🥈'
-      if (rank === 3) return '🥉'
-      return rank
-    }
-
-    function formatTime(seconds) {
-      const mins = Math.floor(seconds / 60)
-      const secs = seconds % 60
-      return `${mins}:${String(secs).padStart(2, '0')}`
-    }
-
-    function getAiNextDirection(player, food, gridSize) {
-      const head = player.snake[0]
-      const currentDirection = player.direction
-
-      const possibleMoves = ['UP', 'DOWN', 'LEFT', 'RIGHT'].filter(dir => {
-        if (currentDirection === 'UP' && dir === 'DOWN') return false
-        if (currentDirection === 'DOWN' && dir === 'UP') return false
-        if (currentDirection === 'LEFT' && dir === 'RIGHT') return false
-        if (currentDirection === 'RIGHT' && dir === 'LEFT') return false
-        return true
-      })
-
-      const movesWithScores = possibleMoves.map(dir => {
-        let newX = head.x, newY = head.y
-        if (dir === 'UP') newY--; if (dir === 'DOWN') newY++;
-        if (dir === 'LEFT') newX--; if (dir === 'RIGHT') newX++
-        newX = (newX + gridSize) % gridSize
-        newY = (newY + gridSize) % gridSize
-
-        const isSuicidal = player.snake.some(seg => seg.x === newX && seg.y === newY)
-        if (isSuicidal) return { dir, score: -Infinity }
-
-        const distanceToFood = Math.abs(food.x - newX) + Math.abs(food.y - newY)
-        return { dir, score: -distanceToFood }
-      })
-
-      movesWithScores.sort((a, b) => b.score - a.score)
-      
-      if (movesWithScores.length > 0 && movesWithScores[0].score > -Infinity) {
-        return movesWithScores[0].dir
-      }
-      return player.direction
-    }
-
-    // ============ MAIN APP COMPONENT ============
     function App() {
-      // Screen state
-      const [screen, setScreen] = useState('welcome')
-      const [gameMode, setGameMode] = useState(null)
+      const [screen, setScreen] = useState('welcome');
+      const [mode, setMode] = useState(null);
+      const [gameState, setGameState] = useState(null);
+      const [playing, setPlaying] = useState(false);
+      const [score, setScore] = useState(0);
+      const [time, setTime] = useState(null);
+      const [timeMax, setTimeMax] = useState(null);
+      const [players, setPlayers] = useState(null);
+      const [addr, setAddr] = useState(null);
+      const [connected, setConnected] = useState(false);
+      const [ws, setWs] = useState(null);
+      const [leaderboard, setLeaderboard] = useState([]);
+      const [battleBoard, setBattleBoard] = useState([]);
+      const [activeTab, setActiveTab] = useState('ranked');
+      const [submitting, setSubmitting] = useState(false);
+      const [showHelp, setShowHelp] = useState(false);
+      const [schedules, setSchedules] = useState([]);
+      const [selectedSchedule, setSelectedSchedule] = useState(null);
+      const [queuedSchedules, setQueuedSchedules] = useState(new Set());
 
-      // Game state
-      const [gameState, setGameState] = useState(null)
-      const [isPlaying, setIsPlaying] = useState(false)
-      const [isPaused, setIsPaused] = useState(false)
-      const [score, setScore] = useState(0)
+      const canvasRef = useRef(null);
+      const gameLoopRef = useRef(null);
+      const timerRef = useRef(null);
 
-      // Time
-      const [timeRemaining, setTimeRemaining] = useState(null)
-      const [timeLimit, setTimeLimit] = useState(null)
-
-      // Battle mode
-      const [battlePlayers, setBattlePlayers] = useState(null)
-
-      // Wallet & UI
-      const [userAddress, setUserAddress] = useState(null)
-      const [leaderboard, setLeaderboard] = useState([])
-      const [battleLeaderboard, setBattleLeaderboard] = useState([])
-      const [activeTab, setActiveTab] = useState('ranked')
-      const [submitting, setSubmitting] = useState(false)
-      const [connected, setConnected] = useState(false)
-      const [showExitConfirm, setShowExitConfirm] = useState(false)
-      const [showHelp, setShowHelp] = useState(false)
-
-      // Refs
-      const canvasRef = useRef(null)
-      const gameLoopRef = useRef(null)
-      const timerRef = useRef(null)
-      const battleInactivityRef = useRef({})
-      const lastTapRef = useRef(0)
-
-      // ============ INITIALIZATION ============
       useEffect(() => {
-        const addr = localStorage.getItem('snake:user_address')
-        if (addr) {
-          setUserAddress(addr)
-          setConnected(true)
+        const a = localStorage.getItem('snake:user_address');
+        if (a) {
+          setAddr(a);
+          setConnected(true);
+        } else {
+          connectWallet();
         }
+        fetchBoards();
+        const interval = setInterval(fetchBoards, 5000);
+        return () => clearInterval(interval);
+      }, []);
 
-        // Fetch leaderboards
-        fetchLeaderboards()
-        const leaderboardInterval = setInterval(fetchLeaderboards, 5000)
-        return () => clearInterval(leaderboardInterval)
-      }, [])
+      useEffect(() => {
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsUrl = `${protocol}://${window.location.host}/__battle`;
+        const socket = new WebSocket(wsUrl);
+        socket.onopen = () => setConnected(true);
+        socket.onclose = () => setConnected(false);
+        socket.onmessage = (evt) => {
+          try {
+            const msg = JSON.parse(evt.data);
+            if (msg.type === 'joined_schedule') {
+              // no action needed, already queued
+            } else if (msg.type === 'schedule_state') {
+              // could display waiting players count
+            } else if (msg.type === 'schedule_started') {
+              handleScheduleStart(msg.scheduleId);
+            } else if (msg.type === 'error') {
+              console.error('WS error:', msg.message);
+            } else if (msg.type === 'room_state') {
+              // begin battle room state if needed
+            } else if (msg.type === 'game_started') {
+              handleScheduleStart(msg.scheduleId || selectedSchedule);
+            }
+          } catch (e) {
+            console.error('WS message parse error', e);
+          }
+        };
+        setWs(socket);
+        return () => socket.close();
+      }, []);
 
-      // ============ WALLET CONNECTION ============
+      const fetchBoards = async () => {
+        try {
+          const res = await fetch('/__snake/leaderboard');
+          if (res.ok) {
+            const data = await res.json();
+            setLeaderboard(data.scores || []);
+            setBattleBoard(data.battleScores || []);
+          }
+        } catch (e) {
+          console.error('Leaderboard fetch failed:', e);
+        }
+      };
+
       const connectWallet = async () => {
         try {
           if (window.usernode?.getNodeAddress) {
-            const addr = await window.usernode.getNodeAddress()
-            setUserAddress(addr)
-            setConnected(true)
-            localStorage.setItem('snake:user_address', addr)
+            const a = await window.usernode.getNodeAddress();
+            setAddr(a);
+            setConnected(true);
+            localStorage.setItem('snake:user_address', a);
+          } else {
+            // Fallback: generate mock address for local dev mode
+            const mockAddr = localStorage.getItem('usernode:mockAddress') || 
+              'ut1_local_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('usernode:mockAddress', mockAddr);
+            setAddr(mockAddr);
+            setConnected(true);
+            localStorage.setItem('snake:user_address', mockAddr);
           }
         } catch (err) {
-          console.error('Wallet connection failed:', err)
+          console.error('Wallet connection failed:', err);
+          // Fallback on error
+          const mockAddr = 'ut1_local_' + Math.random().toString(36).substr(2, 9);
+          localStorage.setItem('usernode:mockAddress', mockAddr);
+          setAddr(mockAddr);
+          setConnected(true);
+          localStorage.setItem('snake:user_address', mockAddr);
         }
-      }
+      };
 
-      // ============ LEADERBOARD ============
-      const fetchLeaderboards = async () => {
-        try {
-          const response = await fetch('/__snake/leaderboard')
-          if (response.ok) {
-            const data = await response.json()
-            setLeaderboard(data.scores || [])
-            setBattleLeaderboard(data.battleScores || [])
-          }
-        } catch (err) {
-          console.error('Failed to fetch leaderboard:', err)
-        }
-      }
-
-      // ============ GAME INITIALIZATION ============
       const initGame = () => {
-        const initialSnake = [
-          { x: 10, y: 10 },
-          { x: 9, y: 10 },
-          { x: 8, y: 10 },
-        ]
-        const food = {
-          x: Math.floor(Math.random() * GRID_SIZE),
-          y: Math.floor(Math.random() * GRID_SIZE),
+        const snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+        const food = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+        setGameState({ snake, food, dir: 'RIGHT', nextDir: 'RIGHT' });
+        setScore(0);
+      };
+
+      const initBattle = () => {
+        const playerSnake = [{ x: 10, y: 10 }, { x: 9, y: 10 }];
+        const battlePlayers = [{
+          id: 0,
+          snake: playerSnake,
+          dir: 'RIGHT',
+          nextDir: 'RIGHT',
+          food: 0,
+          alive: true,
+          time: 180,
+          isRealPlayer: true
+        }];
+        const foodPosition = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+        setPlayers(battlePlayers);
+        setGameState({ food: foodPosition });
+      };
+
+      const startGame = async (m) => {
+        setMode(m);
+        if (m === RANKED || m === BATTLE) {
+          const upcomingSchedules = await fetchSchedules(m);
+          setSchedules(upcomingSchedules);
+          setScreen('schedule');
+          return;
         }
-        setGameState({
-          snake: initialSnake,
-          food: food,
-          direction: 'RIGHT',
-          nextDirection: 'RIGHT',
-        })
-        setScore(0)
-        setIsPaused(false)
-      }
+        setScreen('playing');
+        initGame();
+        setPlaying(true);
+      };
 
-      const initBattleGame = () => {
-        const positions = [[5, 5], [15, 5], [10, 10], [5, 15], [15, 15]]
-        const numPlayers = Math.floor(Math.random() * (BATTLE_MAX_PLAYERS - 1)) + 2
-
-        const players = Array.from({ length: numPlayers }, (_, i) => {
-          const [x, y] = positions[i]
-          return {
-            id: i,
-            snake: [{ x, y }, { x: x - 1, y }, { x: x - 2, y }],
-            direction: 'RIGHT',
-            nextDirection: 'RIGHT',
-            food: 0,
-            alive: true,
-            lastFoodTime: Date.now(),
-            timeRemaining: RANKED_TIME_LIMITS[Math.floor(Math.random() * RANKED_TIME_LIMITS.length)],
-          }
-        })
-
-        let food
-        let valid = false
-        while (!valid) {
-          food = {
-            x: Math.floor(Math.random() * GRID_SIZE),
-            y: Math.floor(Math.random() * GRID_SIZE),
-          }
-          valid = !players.some((p) => p.snake.some((seg) => seg.x === food.x && seg.y === food.y))
-        }
-
-        setBattlePlayers(players)
-        setGameState({ food })
-        battleInactivityRef.current = {}
-        players.forEach((p) => {
-          battleInactivityRef.current[p.id] = Date.now()
-        })
-      }
-
-      const startGame = (mode) => {
-        setGameMode(mode)
-        if (mode === RANKED_MODE) {
-          const limit = RANKED_TIME_LIMITS[Math.floor(Math.random() * RANKED_TIME_LIMITS.length)]
-          setTimeLimit(limit)
-          setTimeRemaining(limit)
-          initGame()
-        } else if (mode === BATTLE_MODE) {
-          initBattleGame()
+      const joinSchedule = (scheduleId) => {
+        if (queuedSchedules.size > 0 && !queuedSchedules.has(scheduleId)) return;
+        setQueuedSchedules(prev => new Set([...prev, scheduleId]));
+        setSelectedSchedule(scheduleId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'join_schedule', scheduleId, mode }));
         } else {
-          initGame()
+          const schedule = schedules.find(s => s.id === scheduleId);
+          if (schedule) {
+            const waitTime = Math.max(0, schedule.startTime - new Date().getTime());
+            setTimeout(() => {
+              handleScheduleStart(scheduleId);
+            }, Math.min(waitTime, 3000));
+          }
         }
-        setIsPlaying(true)
-        setScreen('playing')
+      };
+
+      function handleScheduleStart(scheduleId) {
+        setQueuedSchedules(prev => {
+          const nxt = new Set(prev);
+          nxt.delete(scheduleId);
+          return nxt;
+        });
+        const schedule = schedules.find(s => s.id === scheduleId);
+        setScreen('playing');
+        if (mode === RANKED) {
+          setTimeMax(30);
+          setTime(30);
+          initGame();
+        } else if (mode === BATTLE) {
+          initBattle();
+        }
+        setPlaying(true);
       }
 
-      // ============ GAME LOOP (CLASSIC/RANKED) ============
+      // Game Loop
       useEffect(() => {
-        if (!isPlaying || !gameState || gameMode === BATTLE_MODE || isPaused) return
+        if (!playing || !gameState || (mode === BATTLE && !players)) return;
 
-        const gameLoop = () => {
-          setGameState((prev) => {
-            let direction = prev.nextDirection
-            
-            // Prevent reversal
-            if (
-              (direction === 'UP' && prev.direction === 'DOWN') ||
-              (direction === 'DOWN' && prev.direction === 'UP') ||
-              (direction === 'LEFT' && prev.direction === 'RIGHT') ||
-              (direction === 'RIGHT' && prev.direction === 'LEFT')
-            ) {
-              direction = prev.direction
-            }
+        const tick = () => {
+          if (mode === BATTLE) {
+            setPlayers(pp => {
+              if (!pp) return pp;
+              const updated = pp.map(p => {
+                if (!p.alive) return p;
 
-            const head = prev.snake[0]
-            let newX = head.x
-            let newY = head.y
+                let dir = p.nextDir;
+                if ((dir === 'UP' && p.dir === 'DOWN') || (dir === 'DOWN' && p.dir === 'UP') ||
+                    (dir === 'LEFT' && p.dir === 'RIGHT') || (dir === 'RIGHT' && p.dir === 'LEFT')) {
+                  dir = p.dir;
+                }
 
-            switch (direction) {
-              case 'UP': newY -= 1; break
-              case 'DOWN': newY += 1; break
-              case 'LEFT': newX -= 1; break
-              case 'RIGHT': newX += 1; break
-              default: break
-            }
+                const h = p.snake[0];
+                let nx = h.x, ny = h.y;
+                if (dir === 'UP') ny--;
+                else if (dir === 'DOWN') ny++;
+                else if (dir === 'LEFT') nx--;
+                else nx++;
+                nx = (nx + GRID_SIZE) % GRID_SIZE;
+                ny = (ny + GRID_SIZE) % GRID_SIZE;
 
-            // Wrap around
-            newX = (newX + GRID_SIZE) % GRID_SIZE
-            newY = (newY + GRID_SIZE) % GRID_SIZE
+                if (p.snake.some(s => s.x === nx && s.y === ny)) return { ...p, alive: false };
 
-            // Check self collision
-            if (prev.snake.some((seg) => seg.x === newX && seg.y === newY)) {
-              setIsPlaying(false) // Signal game over
-              return prev
-            }
+                const ns = [{ x: nx, y: ny }, ...p.snake];
+                if (nx === gameState.food.x && ny === gameState.food.y) {
+                  return { ...p, snake: ns, food: p.food + 1, dir };
+                }
+                ns.pop();
+                return { ...p, snake: ns, dir };
+              });
 
-            const newSnake = [{ x: newX, y: newY }, ...prev.snake]
+              const alive = updated.filter(p => p.alive).length;
+              if (alive <= 1) setPlaying(false);
+              return updated;
+            });
 
-            // Check food collision
-            if (newX === prev.food.x && newY === prev.food.y) {
-              setScore((s) => s + 10)
-              if (gameMode === RANKED_MODE) {
-                setTimeRemaining((t) => t + 30)
-              }
-              
-              let newFood
+            setGameState(prev => {
+              const allSegs = players?.filter(p => p.alive).flatMap(p => p.snake) || [];
+              if (allSegs.some(s => s.x === prev.food.x && s.y === prev.food.y)) return prev;
+              let nf;
               do {
-                newFood = {
-                  x: Math.floor(Math.random() * GRID_SIZE),
-                  y: Math.floor(Math.random() * GRID_SIZE),
-                }
-              } while (newSnake.some((seg) => seg.x === newFood.x && seg.y === newFood.y))
-
-              return {
-                ...prev,
-                snake: newSnake,
-                food: newFood,
-                direction: direction,
+                nf = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+              } while (allSegs.some(s => s.x === nf.x && s.y === nf.y));
+              return { ...prev, food: nf };
+            });
+          } else {
+            setGameState(prev => {
+              let dir = prev.nextDir;
+              if ((dir === 'UP' && prev.dir === 'DOWN') || (dir === 'DOWN' && prev.dir === 'UP') ||
+                  (dir === 'LEFT' && prev.dir === 'RIGHT') || (dir === 'RIGHT' && prev.dir === 'LEFT')) {
+                dir = prev.dir;
               }
-            }
 
-            newSnake.pop()
-            return {
-              ...prev,
-              snake: newSnake,
-              direction: direction,
-            }
-          })
-        }
+              const h = prev.snake[0];
+              let nx = h.x, ny = h.y;
+              if (dir === 'UP') ny--;
+              else if (dir === 'DOWN') ny++;
+              else if (dir === 'LEFT') nx--;
+              else nx++;
+              nx = (nx + GRID_SIZE) % GRID_SIZE;
+              ny = (ny + GRID_SIZE) % GRID_SIZE;
 
-        gameLoopRef.current = setInterval(gameLoop, GAME_LOOP_INTERVAL)
-        return () => clearInterval(gameLoopRef.current)
-      }, [isPlaying, gameState, gameMode, isPaused])
+              if (prev.snake.some(s => s.x === nx && s.y === ny)) {
+                setPlaying(false);
+                return prev;
+              }
 
-      // ============ BATTLE GAME LOOP ============
+              const ns = [{ x: nx, y: ny }, ...prev.snake];
+
+              if (nx === prev.food.x && ny === prev.food.y) {
+                setScore(s => s + 10);
+                if (mode === RANKED) setTime(t => t + 30);
+
+                let nf;
+                do {
+                  nf = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+                } while (ns.some(s => s.x === nf.x && s.y === nf.y));
+                return { ...prev, snake: ns, food: nf, dir };
+              }
+
+              ns.pop();
+              return { ...prev, snake: ns, dir };
+            });
+          }
+        };
+
+        gameLoopRef.current = setInterval(tick, GAME_LOOP_INTERVAL);
+        return () => clearInterval(gameLoopRef.current);
+      }, [playing, gameState, mode, players]);
+
+      // Timer
       useEffect(() => {
-        if (!isPlaying || !battlePlayers || gameMode !== BATTLE_MODE || isPaused) return
-
-        const gameLoop = () => {
-          setBattlePlayers((players) => {
-            if (!players) return players
-
-            const updated = players.map((player) => {
-              if (!player.alive) return player
-
-              if (player.id !== 0) {
-                player.nextDirection = getAiNextDirection(player, gameState.food, GRID_SIZE)
-              }
-
-              let direction = player.nextDirection || player.direction
-              
-              if (
-                (direction === 'UP' && player.direction === 'DOWN') ||
-                (direction === 'DOWN' && player.direction === 'UP') ||
-                (direction === 'LEFT' && player.direction === 'RIGHT') ||
-                (direction === 'RIGHT' && player.direction === 'LEFT')
-              ) {
-                direction = player.direction
-              }
-
-              const head = player.snake[0]
-              let newX = head.x
-              let newY = head.y
-
-              switch (direction) {
-                case 'UP': newY -= 1; break
-                case 'DOWN': newY += 1; break
-                case 'LEFT': newX -= 1; break
-                case 'RIGHT': newX += 1; break
-                default: break
-              }
-
-              newX = (newX + GRID_SIZE) % GRID_SIZE
-              newY = (newY + GRID_SIZE) % GRID_SIZE
-
-              if (player.snake.some((seg) => seg.x === newX && seg.y === newY)) {
-                return { ...player, alive: false }
-              }
-
-              const newSnake = [{ x: newX, y: newY }, ...player.snake]
-
-              const foodCollided = newX === gameState.food.x && newY === gameState.food.y
-
-              if (foodCollided) {
-                battleInactivityRef.current[player.id] = Date.now()
-                return {
-                  ...player,
-                  snake: newSnake,
-                  food: player.food + 1,
-                  direction: direction,
-                  lastFoodTime: Date.now(),
-                }
-              }
-
-              newSnake.pop()
-              return {
-                ...player,
-                snake: newSnake,
-                direction: direction,
-              }
-            })
-
-            // Check inactivity
-            const now = Date.now()
-            updated.forEach((player) => {
-              if (player.alive && now - battleInactivityRef.current[player.id] > BATTLE_INACTIVITY_TIMEOUT) {
-                player.alive = false
-              }
-            })
-
-            const stillAlive = updated.filter((p) => p.alive)
-            if (stillAlive.length === 0 || stillAlive.length === 1) {
-              setIsPlaying(false)
-            }
-
-            return updated
-          })
-
-          setGameState((prev) => {
-            const allSnakeSegs = battlePlayers
-              .filter((p) => p.alive)
-              .flatMap((p) => p.snake)
-            const valid = !allSnakeSegs.some((seg) => seg.x === prev.food.x && seg.y === prev.food.y)
-            
-            if (valid) return prev
-
-            let newFood
-            do {
-              newFood = {
-                x: Math.floor(Math.random() * GRID_SIZE),
-                y: Math.floor(Math.random() * GRID_SIZE),
-              }
-            } while (allSnakeSegs.some((seg) => seg.x === newFood.x && seg.y === newFood.y))
-
-            return { ...prev, food: newFood }
-          })
-        }
-
-        gameLoopRef.current = setInterval(gameLoop, GAME_LOOP_INTERVAL)
-        return () => clearInterval(gameLoopRef.current)
-      }, [isPlaying, battlePlayers, gameMode, gameState, isPaused])
-
-      // ============ TIMER (RANKED MODE) ============
-      useEffect(() => {
-        if (!isPlaying || gameMode !== RANKED_MODE || !timeLimit) return
+        if (!playing || (mode !== RANKED && mode !== BATTLE)) return;
 
         timerRef.current = setInterval(() => {
-          setTimeRemaining((prev) => {
-            if (prev <= 1) {
-              clearInterval(timerRef.current)
-              setIsPlaying(false) // Signal game over
-              return 0
-            }
-            return prev - 1
-          })
-        }, 1000)
+          if (mode === RANKED) {
+            setTime(t => {
+              if (t <= 1) {
+                setPlaying(false);
+                return 0;
+              }
+              return t - 1;
+            });
+          } else if (mode === BATTLE) {
+            setPlayers(pp => {
+              const updated = pp?.map(p => ({
+                ...p,
+                time: Math.max(0, p.time - 1),
+                alive: p.alive && p.time > 1
+              })) || [];
+              if (updated.filter(p => p.alive).length <= 1) setPlaying(false);
+              return updated;
+            });
+          }
+        }, 1000);
 
-        return () => clearInterval(timerRef.current)
-      }, [isPlaying, gameMode, timeLimit])
+        return () => clearInterval(timerRef.current);
+      }, [playing, mode]);
 
-      // ============ TIMER (BATTLE MODE) ============
+      // Input
       useEffect(() => {
-        if (!isPlaying || gameMode !== BATTLE_MODE || !battlePlayers) return
+        if (!playing) return;
 
-        timerRef.current = setInterval(() => {
-          setBattlePlayers((players) => {
-            if (!players) return players
-            const updated = players.map((p) => ({
-              ...p,
-              timeRemaining: Math.max(0, p.timeRemaining - 1),
-              alive: p.alive && p.timeRemaining > 1,
-            }))
-            const stillAlive = updated.filter((p) => p.alive)
-            if (stillAlive.length <= 1) {
-              setIsPlaying(false)
+        const handleKey = (e) => {
+          const map = {
+            ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT',
+            KeyW: 'UP', KeyS: 'DOWN', KeyA: 'LEFT', KeyD: 'RIGHT'
+          };
+          if (map[e.code]) {
+            e.preventDefault();
+            if (mode === BATTLE) {
+              setPlayers(p => p?.map(pl => pl.id === 0 ? { ...pl, nextDir: map[e.code] } : pl));
+            } else {
+              setGameState(g => ({ ...g, nextDir: map[e.code] }));
             }
-            return updated
-          })
-        }, 1000)
-
-        return () => clearInterval(timerRef.current)
-      }, [isPlaying, gameMode, battlePlayers])
-
-      // ============ INPUT HANDLING ============
-      useEffect(() => {
-        if (!isPlaying || !gameState) return
-
-        const handleKeyPress = (e) => {
-          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space'].includes(e.code)) {
-            return
           }
+        };
 
-          e.preventDefault()
+        let touchStart = { x: 0, y: 0 };
+        const handleTouch = (e) => {
+          if (e.type === 'touchstart') {
+            touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+          } else if (e.type === 'touchmove') {
+            const dx = e.touches[0].clientX - touchStart.x;
+            const dy = e.touches[0].clientY - touchStart.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 10) return;
 
-          if (e.code === 'Space') {
-            setIsPaused((prev) => !prev)
-            return
+            const angle = Math.atan2(dy, dx);
+            let dir;
+            if (angle > -0.785 && angle < 0.785) dir = 'RIGHT';
+            else if (angle > 0.785 && angle < 2.356) dir = 'DOWN';
+            else if (angle > 2.356 || angle < -2.356) dir = 'LEFT';
+            else dir = 'UP';
+
+            if (mode === BATTLE) {
+              setPlayers(p => p?.map(pl => pl.id === 0 ? { ...pl, nextDir: dir } : pl));
+            } else {
+              setGameState(g => ({ ...g, nextDir: dir }));
+            }
+            touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
           }
+        };
 
-          const directionMap = {
-            ArrowUp: 'UP',
-            ArrowDown: 'DOWN',
-            ArrowLeft: 'LEFT',
-            ArrowRight: 'RIGHT',
-            KeyW: 'UP',
-            KeyS: 'DOWN',
-            KeyA: 'LEFT',
-            KeyD: 'RIGHT',
-          }
-
-          const direction = directionMap[e.code]
-          if (direction) {
-            handleDirectionChange(direction)
-          }
-        }
-
-        const handleCanvasDoubleTap = () => {
-          const now = Date.now()
-          if (now - lastTapRef.current < 300) {
-            setIsPaused((prev) => !prev)
-          }
-          lastTapRef.current = now
-        }
-
-        document.addEventListener('keydown', handleKeyPress)
-        canvasRef.current?.addEventListener('click', handleCanvasDoubleTap)
+        document.addEventListener('keydown', handleKey);
+        canvasRef.current?.addEventListener('touchstart', handleTouch);
+        canvasRef.current?.addEventListener('touchmove', handleTouch);
 
         return () => {
-          document.removeEventListener('keydown', handleKeyPress)
-          canvasRef.current?.removeEventListener('click', handleCanvasDoubleTap)
-        }
-      }, [isPlaying, gameState, handleDirectionChange])
+          document.removeEventListener('keydown', handleKey);
+          canvasRef.current?.removeEventListener('touchstart', handleTouch);
+          canvasRef.current?.removeEventListener('touchmove', handleTouch);
+        };
+      }, [playing, mode]);
 
-      const handleDirectionChange = useCallback((direction) => {
-        if (!direction) return
-        if (gameMode === BATTLE_MODE) {
-          setBattlePlayers((prev) => {
-            if (!prev) return prev
-            return prev.map((p) => (p.id === 0 ? { ...p, nextDirection: direction } : p))
-          })
-        } else {
-          setGameState((prev) => {
-            if (!prev) return prev
-            return { ...prev, nextDirection: direction }
-          })
-        }
-      }, [gameMode])
-
-      // ============ CANVAS RENDERING ============
+      // Canvas Render
       useEffect(() => {
-        if (!canvasRef.current || !gameState) return
+        if (!canvasRef.current || !gameState) return;
 
-        const canvas = canvasRef.current
-        const ctx = canvas.getContext('2d')
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const parent = canvas.parentElement;
+        const w = parent.clientWidth;
+        const h = parent.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        ctx.scale(dpr, dpr);
 
-        const rect = canvas.getBoundingClientRect()
-        const dpr = window.devicePixelRatio || 1
-        canvas.width = rect.width * dpr
-        canvas.height = rect.height * dpr
-        ctx.scale(dpr, dpr)
+        // w and h already set above
+        const cellSize = w / GRID_SIZE;
 
-        const displayWidth = rect.width
-        const displayHeight = rect.height
-        const cellSize = displayWidth / GRID_SIZE
+        ctx.fillStyle = '#0a0d12';
+        ctx.fillRect(0, 0, w, h);
 
-        // Background
-        ctx.fillStyle = 'rgba(11, 15, 22, 0.3)'
-        ctx.fillRect(0, 0, displayWidth, displayHeight)
-
-        // Grid
-        ctx.strokeStyle = 'rgba(106, 168, 254, 0.05)'
-        ctx.lineWidth = 0.5
-        for (let i = 0; i <= GRID_SIZE; i++) {
-          const pos = i * cellSize
-          ctx.beginPath()
-          ctx.moveTo(pos, 0)
-          ctx.lineTo(pos, displayHeight)
-          ctx.stroke()
-          ctx.beginPath()
-          ctx.moveTo(0, pos)
-          ctx.lineTo(displayWidth, pos)
-          ctx.stroke()
+        ctx.strokeStyle = 'rgba(100, 150, 200, 0.05)';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < GRID_SIZE; i++) {
+          const p = (i + 1) * cellSize;
+          ctx.beginPath();
+          ctx.moveTo(p, 0);
+          ctx.lineTo(p, h);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(0, p);
+          ctx.lineTo(w, p);
+          ctx.stroke();
         }
 
-        // Draw snakes
-        if (gameMode === BATTLE_MODE && battlePlayers) {
-          battlePlayers.forEach((player) => {
-            const color = BATTLE_COLORS[player.id]?.hex || '#6ea8fe'
-            player.snake.forEach((segment, idx) => {
-              const x = segment.x * cellSize
-              const y = segment.y * cellSize
-              if (idx === 0) {
-                ctx.fillStyle = color
-              } else {
-                ctx.fillStyle = `${color}66`
-              }
-              ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2)
-              if (idx === 0) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-                ctx.fillRect(x + 2, y + 2, cellSize / 3, cellSize / 3)
-              }
-            })
-          })
-        } else if (gameState?.snake) {
-          gameState.snake.forEach((segment, idx) => {
-            const x = segment.x * cellSize
-            const y = segment.y * cellSize
-
-            if (idx === 0) {
-              const gradient = ctx.createLinearGradient(x, y, x + cellSize, y + cellSize)
-              gradient.addColorStop(0, '#6EA8FE')
-              gradient.addColorStop(1, '#A78BFA')
-              ctx.fillStyle = gradient
+        if (mode === BATTLE && players) {
+          players.forEach((p, i) => {
+            if (!p.alive) return;
+            const col = BATTLE_COLORS[i];
+            p.snake.forEach((seg, j) => {
+              const x = seg.x * cellSize, y = seg.y * cellSize;
+              ctx.fillStyle = j === 0 ? col : col + '88';
+              ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+            });
+          });
+        } else if (gameState.snake) {
+          gameState.snake.forEach((seg, i) => {
+            const x = seg.x * cellSize, y = seg.y * cellSize;
+            if (i === 0) {
+              ctx.fillStyle = '#6ea8fe';
             } else {
-              const hue = (idx * 10) % 360
-              ctx.fillStyle = `hsl(${140 + hue / 10}, 80%, 60%)`
+              ctx.fillStyle = `hsl(${150 + i * 10}, 70%, 50%)`;
             }
-
-            ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2)
-
-            if (idx === 0) {
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-              ctx.fillRect(x + 2, y + 2, cellSize / 3, cellSize / 3)
-            }
-          })
+            ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+          });
         }
 
-        // Draw food
-        const food = gameState?.food
-        if (food) {
-          const fx = food.x * cellSize
-          const fy = food.y * cellSize
-          const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 300)
-          ctx.fillStyle = '#ff6b6b'
-          ctx.beginPath()
-          ctx.arc(fx + cellSize / 2, fy + cellSize / 2, (cellSize / 2) * pulse, 0, Math.PI * 2)
-          ctx.fill()
-        }
+        const f = gameState.food;
+        const fx = f.x * cellSize + cellSize / 2, fy = f.y * cellSize + cellSize / 2;
+        ctx.fillStyle = '#ff6b6b';
+        ctx.beginPath();
+        ctx.arc(fx, fy, cellSize / 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }, [gameState, players, mode]);
 
-        // Pause overlay
-        if (isPaused) {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-          ctx.fillRect(0, 0, displayWidth, displayHeight)
-          ctx.fillStyle = '#ffffff'
-          ctx.font = '24px Arial'
-          ctx.textAlign = 'center'
-          ctx.fillText('PAUSED', displayWidth / 2, displayHeight / 2)
-          ctx.font = '14px Arial'
-          ctx.fillText('Press SPACE or double tap to resume', displayWidth / 2, displayHeight / 2 + 30)
-        }
-      }, [gameState, battlePlayers, gameMode, isPaused])
-
-      // ============ GAME OVER HANDLER ============
+      // Game Over
       useEffect(() => {
-        if (isPlaying || screen !== 'playing') return
+        if (playing || screen !== 'playing') return;
 
-        if (gameLoopRef.current) clearInterval(gameLoopRef.current)
-        if (timerRef.current) clearInterval(timerRef.current)
-
-        if (gameMode === RANKED_MODE) {
-          submitScore()
-        } else if (gameMode === BATTLE_MODE) {
-          const winner = battlePlayers?.find((p) => p.alive)
-          if (winner && winner.id === 0) {
-            submitBattleScore(winner.food)
-          }
-          setScreen('game-over')
+        if (mode === RANKED) {
+          submitScore();
+        } else if (mode === BATTLE) {
+          const w = players?.find(p => p.alive);
+          if (w && w.id === 0) submitScore(w.food);
+          setScreen('game-over');
         } else {
-          setScreen('game-over')
+          setScreen('game-over');
         }
-      }, [isPlaying])
+      }, [playing]);
 
-      const submitScore = async () => {
-        setSubmitting(true)
-
+      const submitScore = async (food = null) => {
+        setSubmitting(true);
         try {
-          const username = localStorage.getItem('snake:username') || `user_${userAddress.slice(-6)}`
+          const username = localStorage.getItem('snake:username') || `user_${addr.slice(-6)}`;
           const memo = JSON.stringify({
             app: 'snake',
-            type: 'score_submission',
-            score: score,
-            mode: gameMode,
-            timestamp: Date.now(),
-            username: username,
-          })
-
-          if (memo.length > 1024) {
-            throw new Error('Payload too large')
-          }
-
-          startProgressBar()
-          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS)
-
-          completeProgressBar()
+            type: mode === BATTLE ? 'battle_victory' : 'score_submission',
+            score: mode === BATTLE ? food : score,
+            mode, timestamp: Date.now(), username
+          });
+          if (memo.length > 1024) throw new Error('Payload too large');
+          startProgressBar();
+          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
+          completeProgressBar();
           setTimeout(() => {
-            setScreen('game-over')
-            setSubmitting(false)
-          }, 1500)
+            setScreen('game-over');
+            setSubmitting(false);
+          }, 1200);
         } catch (err) {
-          stopProgressBar()
-          console.error('Failed to submit score:', err)
-          setScreen('game-over')
-          setSubmitting(false)
+          console.error('Submit failed:', err);
+          setScreen('game-over');
+          setSubmitting(false);
         }
-      }
+      };
 
-      const submitBattleScore = async (foodCount) => {
-        setSubmitting(true)
-
-        try {
-          const username = localStorage.getItem('snake:username') || `user_${userAddress.slice(-6)}`
-          const memo = JSON.stringify({
-            app: 'snake',
-            type: 'battle_victory',
-            food: foodCount,
-            timestamp: Date.now(),
-            username: username,
-          })
-
-          if (memo.length > 1024) {
-            throw new Error('Payload too large')
-          }
-
-          startProgressBar()
-          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS)
-
-          completeProgressBar()
-          setTimeout(() => {
-            setSubmitting(false)
-          }, 1500)
-        } catch (err) {
-          stopProgressBar()
-          console.error('Failed to submit battle score:', err)
-          setSubmitting(false)
-        }
-      }
-
-      const handleExitRequest = () => {
-        setShowExitConfirm(true)
-      }
-
-      const confirmExit = () => {
-        setShowExitConfirm(false)
-        setIsPlaying(false)
-        if (gameLoopRef.current) clearInterval(gameLoopRef.current)
-        if (timerRef.current) clearInterval(timerRef.current)
-
-        if (gameMode === CLASSIC_MODE) {
-          setScreen('mode-select')
-        } else if (gameMode === RANKED_MODE) {
-          submitScore()
-        } else if (gameMode === BATTLE_MODE) {
-          const myPlayer = battlePlayers?.find((p) => p.id === 0)
-          submitBattleScore(myPlayer ? myPlayer.food : 0)
-        }
-      }
-
-      // ============ RENDER ============
+      // Render
       return (
         <div className="container">
-          {showHelp && <HelpMenu onClose={() => setShowHelp(false)} />}
-          {showExitConfirm && (
-            <div className="modal-overlay">
-              <div className="modal-content" style={{ maxWidth: '300px', textAlign: 'center' }}>
-                <h3>Exit Game?</h3>
-                <p style={{ marginBottom: '20px', color: 'var(--muted)' }}>
-                  {gameMode === CLASSIC_MODE
-                    ? 'Progress will be lost.'
-                    : 'Your current score will be submitted.'}
-                </p>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                  <button className="btn btn-secondary" onClick={() => setShowExitConfirm(false)}>
-                    Cancel
-                  </button>
-                  <button className="btn btn-primary" onClick={confirmExit}>
-                    Confirm
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+          
           <header className="header">
-            <div className="header-content">
-              <div className="logo">🐍 Snake Game</div>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <button className="btn btn-secondary" onClick={() => setShowHelp(true)}>
-                  Help & Rules
-                </button>
-                <button className="btn btn-secondary" onClick={connectWallet} style={{ display: connected ? 'none' : 'inline-flex' }}>
-                  Connect Wallet
-                </button>
-                {connected && (
-                  <>
-                    <div className="wallet-info">
-                      <span>✓</span>
-                      <div className="wallet-address">{userAddress.slice(-8)}</div>
-                    </div>
-                  </>
-                )}
-              </div>
+            <div className="logo">🐍 Snake</div>
+            <div className="header-right">
+              {screen !== 'playing' && <button className="btn" onClick={() => setShowHelp(true)}>? Help</button>}
+              <button className="btn" onClick={connectWallet} style={{ display: connected ? 'none' : 'inline-flex' }}>
+                Wallet
+              </button>
+              {connected && (
+                <div className="wallet-badge">
+                  ✓ {addr ? `${addr.slice(0, 5)}...${addr.slice(-6)}` : 'Connected'}
+                </div>
+              )}
             </div>
           </header>
 
           <div className="content">
             {screen === 'welcome' && (
-              <WelcomeScreen
-                onPlayClick={() => setScreen('mode-select')}
-                leaderboard={leaderboard}
-                battleLeaderboard={battleLeaderboard}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-              />
+              <div className="screen welcome-screen">
+                <div className="welcome-title">🐍 SNAKE</div>
+                <div className="welcome-text">Play • Earn • Compete</div>
+                <button className="btn" onClick={() => setScreen('mode-select')} style={{ fontSize: '14px', padding: '10px 24px' }}>
+                  PLAY NOW
+                </button>
+                <div style={{ marginTop: '24px', width: '100%', maxWidth: '480px' }}>
+                  <Leaderboard boards={{ leaderboard, battleBoard, activeTab, setActiveTab }} />
+                </div>
+              </div>
             )}
 
             {screen === 'mode-select' && (
-              <ModeSelectScreen onStartGame={startGame} onBack={() => setScreen('welcome')} />
+              <div className="screen mode-select-screen">
+                <div>
+                  <h2 style={{ fontSize: '20px', marginBottom: '16px', textAlign: 'center' }}>Select Mode</h2>
+                  <div className="modes-grid">
+                    <div className="mode-card" onClick={() => startGame(CLASSIC)}>
+                      <div className="mode-icon">🎮</div>
+                      <div className="mode-title">Classic</div>
+                      <div className="mode-desc">No limit • No score saved</div>
+                    </div>
+                    <div className="mode-card" onClick={() => startGame(RANKED)}>
+                      <div className="mode-icon">🏆</div>
+                      <div className="mode-title">Ranked</div>
+                      <div className="mode-desc">Timed • Submit to leaderboard</div>
+                    </div>
+                    <div className="mode-card" onClick={() => startGame(BATTLE)}>
+                      <div className="mode-icon">⚔️</div>
+                      <div className="mode-title">Battle</div>
+                      <div className="mode-desc">Multiplayer • Compete vs AI</div>
+                    </div>
+                  </div>
+                  <button className="btn" onClick={() => setScreen('welcome')} style={{ marginTop: '16px' }}>
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {screen === 'schedule' && (
+              <div className="screen schedule-screen">
+                <div className="schedule-container">
+                  <div className="schedule-title">
+                    {mode === RANKED ? '🏆 Ranked Sessions' : '⚔️ Battle Sessions'}
+                  </div>
+                  <div className="schedule-subtitle">
+                    Join a session or queue for upcoming times
+                  </div>
+
+                  <div className="schedule-grid">
+                    {schedules.map((sched) => {
+                      const isQueued = queuedSchedules.has(sched.id);
+                      const hasOther = queuedSchedules.size > 0 && !isQueued;
+                      const available = !isQueued && !hasOther;
+                      const timeStr = formatScheduleTime(sched.startTime);
+
+                      return (
+                        <div
+                          key={sched.id}
+                          className={`schedule-slot ${isQueued ? 'queued' : available ? 'available' : ''}`}
+                          onClick={() => available && joinSchedule(sched.id)}
+                          style={{ cursor: available ? 'pointer' : 'default', opacity: available ? 1 : 0.55 }}
+                        >
+                          <div className="schedule-time">{sched.displayTime}</div>
+                          <div className={`schedule-status ${isQueued ? 'queued' : 'available'}`}>
+                            {isQueued ? '✓ Queued' : '〇 Available'}
+                          </div>
+                          {isQueued && <div className="schedule-queued-text">You are in queue</div>}
+                          <div className="schedule-status" style={{ marginTop: '4px' }}>
+                            {timeStr}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      if (queuedSchedules.size > 0) {
+                        // Start the game with selected schedule
+                        const selected = Array.from(queuedSchedules)[0];
+                        joinSchedule(selected);
+                      }
+                    }}
+                    disabled={queuedSchedules.size === 0}
+                    style={{ marginTop: '16px' }}
+                  >
+                    {queuedSchedules.size > 0 ? 'Confirm & Start' : 'Select a time to continue'}
+                  </button>
+
+                  <button
+                    className="btn"
+                    onClick={() => setScreen('mode-select')}
+                    style={{ marginTop: '8px', background: 'var(--border)' }}
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
             )}
 
             {screen === 'playing' && (
-              <GameScreen
-                gameMode={gameMode}
-                onExit={handleExitRequest}
-                canvasRef={canvasRef}
-                battlePlayers={battlePlayers}
-                score={score}
-                timeRemaining={timeRemaining}
-              />
+              <div className="game-layout">
+                <div className="game-canvas-section">
+                  <div className="game-canvas-area">
+                    <canvas ref={canvasRef}></canvas>
+
+                    <div className="game-overlay">
+                      <div className="game-stat">
+                        <div className="stat-label">Score</div>
+                        <div className="stat-value">{score}</div>
+                      </div>
+                      {mode === RANKED && time !== null && (
+                        <div className="game-stat">
+                          <div className="stat-label">Time</div>
+                          <div className="stat-value">{Math.floor(time / 60)}:{String(time % 60).padStart(2, '0')}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <button className="exit-btn" onClick={() => {
+                      setPlaying(false);
+                      clearInterval(gameLoopRef.current);
+                      clearInterval(timerRef.current);
+                      setScreen('game-over');
+                    }}>
+                      Exit
+                    </button>
+
+                    {mode === BATTLE && players && (
+                      <div className="battle-panel">
+                        {players.map((p, i) => (
+                          <div key={i} className="player-card">
+                            <div className="player-row">
+                              <div className="player-dot" style={{ background: BATTLE_COLORS[i] }}></div>
+                              <div className="player-name">{p.id === 0 ? 'You' : `AI ${p.id}`}</div>
+                              {!p.alive && <div className="player-status">OUT</div>}
+                            </div>
+                            <div className="player-stat-line">Food: {p.food}</div>
+                            <div className="player-stat-line">Time: {p.time}s</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div id="txProgress" className="tx-progress hide" style={{ display: 'none' }}>
+                      <div className="tx-fill"></div>
+                    </div>
+                  </div>
+
+                  {/* Mobile: Stats below canvas */}
+                  <div className="game-stats-mobile">
+                    <div className="stat-item">
+                      <div className="stat-label">Score</div>
+                      <div className="stat-value">{score}</div>
+                    </div>
+                    {mode === RANKED && time !== null && (
+                      <div className="stat-item">
+                        <div className="stat-label">Time</div>
+                        <div className="stat-value">{Math.floor(time / 60)}:{String(time % 60).padStart(2, '0')}</div>
+                      </div>
+                    )}
+                    {mode === BATTLE && players && (
+                      <div className="stat-item">
+                        <div className="stat-label">Players</div>
+                        <div className="stat-value">{players.filter(p => p.alive).length}/{players.length}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* PC: Info panel on right (50% screen) */}
+                <div className="game-info-section">
+                  <div className="game-info-panel">
+                    <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px' }}>
+                      📊 Game Info
+                    </div>
+                    <div style={{ fontSize: '12px', gap: '8px', display: 'flex', flexDirection: 'column', color: 'var(--muted)' }}>
+                      <div>Mode: <span style={{ color: 'var(--accent)' }}>{mode.toUpperCase()}</span></div>
+                      <div>Score: <span style={{ color: 'var(--ok)' }}>{score}</span></div>
+                      {mode === RANKED && time !== null && (
+                        <div>Time: <span style={{ color: 'var(--accent)' }}>
+                          {Math.floor(time / 60)}:{String(time % 60).padStart(2, '0')}
+                        </span></div>
+                      )}
+                      {mode === BATTLE && players && (
+                        <div>Active Players: <span style={{ color: 'var(--accent)' }}>
+                          {players.filter(p => p.alive).length}/{players.length}
+                        </span></div>
+                      )}
+                    </div>
+                  </div>
+
+                  {mode === BATTLE && players && (
+                    <div className="game-info-panel">
+                      <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px' }}>
+                        ⚔️ Players
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {players.map((p, i) => (
+                          <div key={i} style={{ fontSize: '12px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', borderLeft: `3px solid ${BATTLE_COLORS[i]}` }}>
+                            <div style={{ fontWeight: '700' }}>{p.id === 0 ? 'You' : `Player ${p.id}`} {!p.alive && '(OUT)'}</div>
+                            <div style={{ color: 'var(--muted)', fontSize: '11px', marginTop: '4px' }}>
+                              Food: {p.food} | Time: {p.time}s
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="game-info-panel">
+                    <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px' }}>
+                      🎮 Controls
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: '1.6' }}>
+                      <div><strong>PC:</strong> Arrow Keys or WASD</div>
+                      <div><strong>Mobile:</strong> Drag/Swipe on canvas</div>
+                      <div><strong>Pause:</strong> Press Space</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {screen === 'game-over' && (
-              <GameOverScreen
-                gameMode={gameMode}
-                score={score}
-                onPlayAgain={() => startGame(gameMode)}
-                onSwitchMode={() => setScreen('mode-select')}
-                onMenu={() => setScreen('welcome')}
-                submitting={submitting}
-                leaderboard={leaderboard}
-                battleLeaderboard={battleLeaderboard}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-              />
+              <div className="screen game-over-screen">
+                <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Game Over!</h2>
+                <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '12px' }}>
+                  {mode === CLASSIC ? 'Classic Mode' : mode === RANKED ? 'Ranked Mode' : 'Battle Mode'}
+                </div>
+                <div className="game-over-score">{score}</div>
+                <div style={{ marginBottom: '16px', width: '100%' }}>
+                  <Leaderboard boards={{ leaderboard, battleBoard, activeTab, setActiveTab }} />
+                </div>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={() => startGame(mode)} disabled={submitting}>
+                    Play Again
+                  </button>
+                  <button className="btn" onClick={() => setScreen('mode-select')} disabled={submitting}>
+                    Change Mode
+                  </button>
+                  <button className="btn" onClick={() => setScreen('welcome')} disabled={submitting}>
+                    Menu
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
-      )
+      );
     }
 
-    // ============ SCREEN & UI COMPONENTS ============
-
-    function WelcomeScreen({ onPlayClick, leaderboard, battleLeaderboard, activeTab, setActiveTab }) {
+    function Leaderboard({ boards: { leaderboard, battleBoard, activeTab, setActiveTab } }) {
+      const data = activeTab === 'ranked' ? leaderboard : battleBoard;
       return (
-        <div className="screen welcome-screen">
-          <div className="welcome-title">🐍 Snake Game</div>
-          <div className="welcome-subtitle">Connect your wallet and compete on the leaderboard!</div>
-          <button className="btn btn-primary" onClick={onPlayClick}>
-            Play Now
-          </button>
-          <div style={{ marginTop: '20px', width: '100%' }}>
-            <Leaderboard
-              leaderboard={leaderboard}
-              battleLeaderboard={battleLeaderboard}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-            />
-          </div>
-        </div>
-      )
-    }
-
-    function ModeSelectScreen({ onStartGame, onBack }) {
-      return (
-        <div className="screen" style={{ justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ textAlign: 'center' }}>
-            <h2 style={{ marginBottom: '24px' }}>Select Game Mode</h2>
-            <div className="game-modes">
-              <div className="mode-card" onClick={() => onStartGame(CLASSIC_MODE)}>
-                <div className="mode-icon">🎮</div>
-                <div className="mode-title">Classic</div>
-                <div className="mode-description">No time limit, no score saved</div>
-              </div>
-              <div className="mode-card" onClick={() => onStartGame(RANKED_MODE)}>
-                <div className="mode-icon">🏆</div>
-                <div className="mode-title">Ranked</div>
-                <div className="mode-description">Random time, auto submit</div>
-              </div>
-              <div className="mode-card" onClick={() => onStartGame(BATTLE_MODE)}>
-                <div className="mode-icon">⚔️</div>
-                <div className="mode-title">Battle</div>
-                <div className="mode-description">Multiplayer vs AI opponents</div>
-              </div>
-            </div>
-            <button className="btn btn-secondary" onClick={onBack} style={{ marginTop: '24px' }}>
-              Back
-            </button>
-          </div>
-        </div>
-      )
-    }
-
-    function GameScreen({ gameMode, onExit, canvasRef, battlePlayers, score, timeRemaining }) {
-      return (
-        <div className="screen game-container">
-          <button className="exit-button" onClick={onExit}>
-            Exit
-          </button>
-          {gameMode === BATTLE_MODE ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: '12px', flex: 1, minHeight: 0 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, minHeight: 0 }}>
-                  <canvas ref={canvasRef} id="gameCanvas" style={{ maxWidth: '100%' }}></canvas>
-                </div>
-                <div className="game-stats">
-                  <div className="stat-box">
-                    <div className="stat-label">Players Alive</div>
-                    <div className="stat-value">{battlePlayers?.filter((p) => p.alive).length || 0}</div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '100%', overflowY: 'auto' }}>
-                {battlePlayers?.map((player) => (
-                  <div key={player.id} className="battle-panel">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <div
-                        style={{
-                          width: '12px',
-                          height: '12px',
-                          borderRadius: '2px',
-                          background: BATTLE_COLORS[player.id]?.hex,
-                        }}
-                      ></div>
-                      <div style={{ flex: 1, fontSize: '12px', fontWeight: 600 }}>{player.id === 0 ? 'You' : `AI ${player.id}`}</div>
-                      {!player.alive && <div style={{ fontSize: '10px', color: 'var(--danger)' }}>OUT</div>}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                      Food: <span style={{ color: 'var(--ok)', fontWeight: 'bold' }}>{player.food}</span>
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                      Time: <span style={{ color: 'var(--warning)' }}>{player.timeRemaining}s</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={{ textAlign: 'center' }}>
-                <h3>{gameMode === CLASSIC_MODE ? '🎮 Classic Mode' : '🏆 Ranked Mode'}</h3>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', flex: 1, minHeight: 0 }}>
-                <canvas ref={canvasRef} id="gameCanvas" style={{ aspectRatio: '1/1', maxWidth: '600px', width: '100%' }}></canvas>
-                <div className="game-stats">
-                  <div className="stat-box">
-                    <div className="stat-label">Score</div>
-                    <div className="stat-value">{score}</div>
-                  </div>
-                  {gameMode === RANKED_MODE && timeRemaining !== null && (
-                    <div className="stat-box">
-                      <div className="stat-label">Time Left</div>
-                      <div className="stat-value">{formatTime(timeRemaining)}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-          <div id="txProgress" className="tx-progress hide">
-            <div className="tx-progress-track">
-              <div className="tx-progress-fill"></div>
-            </div>
-            <div className="tx-progress-label">Submitting...</div>
-          </div>
-        </div>
-      )
-    }
-
-    function GameOverScreen({ gameMode, score, onPlayAgain, onSwitchMode, onMenu, submitting, leaderboard, battleLeaderboard, activeTab, setActiveTab }) {
-      return (
-        <div className="screen game-over-screen">
-          <div>
-            <div className="game-over-title">Game Over!</div>
-            <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--muted)' }}>
-              {gameMode === CLASSIC_MODE
-                ? 'Classic Mode'
-                : gameMode === RANKED_MODE
-                ? 'Ranked Mode - Score Submitted!'
-                : 'Battle Mode'}
-            </div>
-          </div>
-          <div className="game-over-score">{score}</div>
-          <div style={{ marginBottom: '20px', width: '100%', maxHeight: '300px', overflowY: 'auto' }}>
-            <Leaderboard
-              leaderboard={leaderboard}
-              battleLeaderboard={battleLeaderboard}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" onClick={onPlayAgain} disabled={submitting}>
-              Play Again
-            </button>
-            <button className="btn btn-secondary" onClick={onSwitchMode} disabled={submitting}>
-              Different Mode
-            </button>
-            <button className="btn btn-secondary" onClick={onMenu} disabled={submitting}>
-              Menu
-            </button>
-          </div>
-        </div>
-      )
-    }
-
-    function HelpMenu({ onClose }) {
-      return (
-        <div className="modal-overlay" onClick={onClose}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>🐍 Help & Rules</h2>
-              <button className="close-button" onClick={onClose}>&times;</button>
-            </div>
-            <div className="modal-body">
-              <h3>Controls</h3>
-              <p>Use Arrow Keys or WASD to move. Press SPACE to pause. On mobile, swipe to move and double-tap to pause.</p>
-              <h3>Game Modes</h3>
-              <ul>
-                <li><b>Classic:</b> Practice without a time limit. Scores are not saved.</li>
-                <li><b>Ranked:</b> Compete against the clock to get a high score on the leaderboard. Your score is automatically submitted.</li>
-                <li><b>Battle:</b> Face off against AI opponents. Be the last snake slithering to win!</li>
-              </ul>
-              <h3>Rules</h3>
-              <ul>
-                <li>Eating food grows your snake and increases your score.</li>
-                <li>In Ranked mode, eating food adds 30 seconds to your timer.</li>
-                <li>Running into your own tail ends the game.</li>
-                <li>Walls wrap around: exiting one side of the screen makes you appear on the opposite side.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
-    function Leaderboard({ leaderboard, battleLeaderboard, activeTab, setActiveTab }) {
-      const displayBoard = activeTab === 'ranked' ? leaderboard : battleLeaderboard
-
-      return (
-        <div className="leaderboard-container">
-          <div className="leaderboard-tabs">
-            <button className={`tab-btn ${activeTab === 'ranked' ? 'active' : ''}`} onClick={() => setActiveTab('ranked')}>
+        <div className="leaderboard">
+          <div className="lb-tabs">
+            <button className={`lb-tab ${activeTab === 'ranked' ? 'active' : ''}`} onClick={() => setActiveTab('ranked')}>
               🏆 Ranked
             </button>
-            <button className={`tab-btn ${activeTab === 'battle' ? 'active' : ''}`} onClick={() => setActiveTab('battle')}>
+            <button className={`lb-tab ${activeTab === 'battle' ? 'active' : ''}`} onClick={() => setActiveTab('battle')}>
               ⚔️ Battle
             </button>
           </div>
-          <div className="leaderboard-title">{activeTab === 'ranked' ? '📊 Top Ranked Scores' : '⚔️ Top Battle Winners'}</div>
-          <div className="leaderboard-list">
-            {displayBoard.length === 0 ? (
-              <div style={{ textAlign: 'center', color: 'var(--muted)' }}>No scores yet. Be the first!</div>
+          <div className="lb-list">
+            {data.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '12px', fontSize: '12px' }}>
+                No scores yet
+              </div>
             ) : (
-              displayBoard.map((entry, idx) => (
-                <div key={idx} className="leaderboard-item">
-                  <div className={`leaderboard-rank rank-${idx + 1}`}>{getMedalEmoji(idx + 1)}</div>
-                  <div className="leaderboard-player">
-                    <div className="leaderboard-name">{entry.username || 'Anonymous'}</div>
-                    <div className="leaderboard-addr">{entry.address.slice(-8)}</div>
+              data.map((e, i) => (
+                <div key={i} className="lb-row">
+                  <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</div>
+                  <div className="lb-info">
+                    <div className="lb-name">{e.username || 'Anonymous'}</div>
+                    <div className="lb-addr">{e.address?.slice(-8)}</div>
                   </div>
-                  <div className="leaderboard-score">{entry.score}</div>
-                  <div className="leaderboard-time">{new Date(entry.timestamp).toLocaleDateString()}</div>
+                  <div className="lb-score">{e.score}</div>
                 </div>
               ))
             )}
           </div>
         </div>
-      )
+      );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    function HelpModal({ onClose }) {
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">
+              <span>🐍 Help & Controls</span>
+              <button className="modal-close" onClick={onClose}>×</button>
+            </div>
+            <div className="modal-body">
+              <h3>Controls</h3>
+              <p><strong>Mobile:</strong> Drag your finger to control the snake. Swipe in any direction.</p>
+              <p><strong>PC:</strong> Use Arrow Keys or WASD to move.</p>
+
+              <h3>Game Modes</h3>
+              <ul>
+                <li><strong>Classic:</strong> Practice mode with no time limit. Scores don't save.</li>
+                <li><strong>Ranked:</strong> Timed challenge. Auto-submits score to leaderboard. 6 games per 24 hours.</li>
+                <li><strong>Battle:</strong> 5-player battle. Last snake alive wins! 5 games per 24 hours.</li>
+              </ul>
+
+              <h3>Rules</h3>
+              <ul>
+                <li>Each food = 10 points (Ranked: +30 seconds)</li>
+                <li>Snake grows with each food eaten</li>
+                <li>Hit your own tail = Game Over</li>
+                <li>Walls wrap around - exit one side to enter the opposite</li>
+                <li>In Battle: Each AI has random time limit</li>
+              </ul>
+
+              <h3>Tips</h3>
+              <ul>
+                <li>Plan moves ahead to avoid getting trapped</li>
+                <li>Use walls strategically</li>
+                <li>In Ranked, eat food to add time</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
