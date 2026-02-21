@@ -711,16 +711,14 @@ function setupWebSocketServer(server) {
 }
 
 function findOrCreateBattleRoom() {
-  // Find a room that's not full and waiting
   for (const room of battleRooms.values()) {
-    if (room.gameState.status === 'waiting' && !room.isFull()) {
-      pushLog('battle', `[Battle] Found waiting room ${room.id}. Joining.`);
+    if (room.gameState.status === 'countdown' && !room.isFull()) {
+      log('BATTLE', `Using existing room ${room.id}`);
       return room;
     }
   }
   
-  // Create a new room
-  const room = new BattleRoom(nextRoomId++, 4);
+  const room = new BattleRoom(nextRoomId++, 4, 300);
   battleRooms.set(room.id, room);
   return room;
 }
@@ -766,55 +764,58 @@ function startBattleSchedule(scheduleId) {
   const wr = waitingRooms.get(scheduleId);
   if (!wr) return;
 
-  // Ranked Mode: Just release players to play locally
   if (scheduleId.startsWith('ranked')) {
-    pushLog('ranked', `[Ranked] Schedule ${scheduleId} starting. Releasing ${wr.sockets.size} players.`);
+    log('RANKED', `Schedule started - releasing ${wr.sockets.size} players to ranked battle`);
     if (!scheduleHistory.has(scheduleId)) scheduleHistory.set(scheduleId, new Set());
     const history = scheduleHistory.get(scheduleId);
 
     for (const [pid, sock] of wr.sockets) {
-      history.add(pid); // Mark as played
+      history.add(pid);
       if (sock.readyState === WebSocket.OPEN) {
         sock.send(JSON.stringify({ type: 'game_started', scheduleId, mode: 'ranked' }));
       }
       sock.scheduleId = null;
     }
+    if (wr.timer) clearTimeout(wr.timer);
     waitingRooms.delete(scheduleId);
     return;
   }
 
-  // Battle Mode: Create multiplayer rooms
-  pushLog('battle', `[Battle] Schedule ${scheduleId} starting. Creating room for ${wr.sockets.size} players.`);
-  const room = new BattleRoom(nextRoomId++, 4);
-  battleRooms.set(room.id, room);
-  for (const [pid, sock] of wr.sockets) {
-    room.addPlayer(pid, pid);
-    sock.scheduleId = null;
-    sock.roomId = room.id;
-    mapSocketToRoom(sock, room.id);
+  if (scheduleId.startsWith('battle')) {
+    log('BATTLE', `Schedule started - creating room for ${wr.sockets.size} players`);
+    const room = new BattleRoom(nextRoomId++, 4, 300);
+    battleRooms.set(room.id, room);
+    
+    for (const [pid, sock] of wr.sockets) {
+      room.addPlayer(pid, pid);
+      sock.scheduleId = null;
+      sock.roomId = room.id;
+      mapSocketToRoom(sock, room.id);
+    }
+    
+    broadcastToRoom(room.id, { type: 'waiting_for_start', state: room.getState() });
+    room.startCountdown();
+    
+    broadcastToRoom(room.id, { type: 'room_state', state: room.getState() });
+    
+    if (wr.timer) clearTimeout(wr.timer);
+    waitingRooms.delete(scheduleId);
   }
-  broadcastToRoom(room.id, { type: 'room_state', state: room.getState() });
-  broadcastToRoom(room.id, { type: 'game_started', state: room.getState() });
-  waitingRooms.delete(scheduleId);
 }
 
 server.listen(PORT, () => {
-  pushLog('system', `Snake game server listening on port ${PORT}`);
+  log('SERVER', `Listening on port ${PORT}`);
   
-  // Setup WebSocket server
   const wsServer = setupWebSocketServer(server);
   if (wsServer) {
-    pushLog('system', `WebSocket server ready for battle mode`);
+    log('WS', `WebSocket server ready`);
   }
   
   if (LOCAL_DEV) {
-    pushLog('system', "Local dev mode enabled - using mock endpoints");
-    // Pre-populate game state with mock transactions on start
+    log('DEV', `Local dev mode enabled`);
     mockStore.transactions.forEach(tx => snakeGame.processTransaction(tx));
-    pushLog('system', `Processed ${mockStore.transactions.length} initial mock transactions.`);
   }
   console.log(`Open http://localhost:${PORT}/`);
-  // Start polling the chain for real transactions
   setInterval(pollChainTransactions, 3000);
-  pollChainTransactions(); // Initial poll
+  pollChainTransactions();
 });

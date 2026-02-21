@@ -922,20 +922,24 @@
           try {
             const msg = JSON.parse(evt.data);
             if (msg.type === 'joined_schedule') {
-              // no action needed, already queued
+              console.log('[WS] Joined schedule queue, waiting for start');
             } else if (msg.type === 'schedule_state') {
               setWaitingInfo(prev => ({ ...prev, [msg.scheduleId]: { startTime: msg.startTime, players: msg.players || [] } }));
-            } else if (msg.type === 'schedule_started') {
-              handleScheduleStart(msg.scheduleId);
-            } else if (msg.type === 'error') {
-              console.error('WS error:', msg.message);
+            } else if (msg.type === 'waiting_for_start') {
+              console.log('[WS] Waiting room created, countdown starting');
+            } else if (msg.type === 'game_starting') {
+              console.log('[WS] Battle starting - beginning countdown');
             } else if (msg.type === 'room_state') {
-              // begin battle room state if needed
+              if (msg.state && msg.state.gameState) {
+                console.log('[WS] Room state:', msg.state.gameState.status);
+              }
             } else if (msg.type === 'game_started') {
               handleScheduleStart(msg.scheduleId || selectedSchedule);
+            } else if (msg.type === 'error') {
+              console.error('[WS] Error:', msg.message);
             }
           } catch (e) {
-            console.error('WS message parse error', e);
+            console.error('[WS] Message parse error', e);
           }
         };
         setWs(socket);
@@ -1495,8 +1499,6 @@
               {connected && (
                 <>
                   <button className="btn" onClick={() => setShowProfile(true)}>Profile</button>
-                  <button className="btn" onClick={() => window.open('/__logs?type=battle', '_blank')}>Battle Logs</button>
-                  <button className="btn" onClick={() => window.open('/__logs?type=ranked', '_blank')}>Ranked Logs</button>
                   <div className="wallet-badge">
                     ✓ {addr ? `${addr.slice(0, 5)}...${addr.slice(-6)}` : 'Connected'}
                   </div>
