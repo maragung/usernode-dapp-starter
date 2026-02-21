@@ -162,7 +162,7 @@ async function pollChainTransactions() {
       const activeChain = await httpsRequest("GET", `https://${EXPLORER_UPSTREAM}${EXPLORER_UPSTREAM_BASE}/active_chain`);
       if (activeChain && activeChain.chain_id) {
         chainId = activeChain.chain_id;
-        console.log(`Chain poller started for chain ID: ${chainId}`);
+        pushLog('system', `Chain poller started for chain ID: ${chainId}`);
       } else {
         console.warn("Could not discover chain ID for polling.");
         return;
@@ -187,14 +187,14 @@ async function pollChainTransactions() {
         newTxs++;
         try {
           const memo = JSON.parse(tx.memo);
-          console.log(`[chain] Processed ${memo.type} from ${tx.source || tx.from_pubkey}`);
+          pushLog('chain', `[chain] Processed ${memo.type} from ${tx.source || tx.from_pubkey}`);
         } catch (e) {
-          console.log(`[chain] Processed transaction ${txId}`);
+          pushLog('chain', `[chain] Processed transaction ${txId}`);
         }
       }
     }
     if (newTxs > 0) {
-      console.log(`[chain] Applied ${newTxs} new transaction(s).`);
+      pushLog('chain', `[chain] Applied ${newTxs} new transaction(s).`);
     }
   } catch (e) {
     // Suppress timeout errors, log others
@@ -302,6 +302,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (pathname === '/__logs') {
+    const q = parsedUrl.query || {};
+    const type = q.type || null;
+    const filtered = type ? logs.filter(l => l.type === type) : logs.slice(-200);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ logs: filtered }));
+    return;
+  }
+
   // Snake game API endpoints
   if (pathname === "/__snake/leaderboard") {
     const leaderboard = snakeGame.getLeaderboard();
@@ -355,6 +364,15 @@ const server = http.createServer((req, res) => {
 // Schedule management
 const schedulesByMode = { ranked: [], battle: [] };
 const scheduleHistory = new Map(); // scheduleId -> Set<playerId>
+// Simple in-memory log buffer
+const LOG_LIMIT = 500;
+const logs = [];
+function pushLog(type, message) {
+  const entry = { ts: Date.now(), type, message };
+  logs.push(entry);
+  if (logs.length > LOG_LIMIT) logs.shift();
+  console.log(message);
+}
 
 function generateServerSchedules(mode) {
   const now = Date.now();
@@ -381,6 +399,7 @@ function generateServerSchedules(mode) {
     }
   }
   schedulesByMode[mode] = result;
+  pushLog(mode, `Generated ${result.length} schedules for ${mode}`);
   return result;
 }
 
@@ -419,7 +438,7 @@ class BattleRoom {
       status: 'waiting' // waiting, playing, finished
     };
     this.createdAt = Date.now();
-    console.log(`[Battle] Created room ${this.id}`);
+    pushLog('battle', `[Battle] Created room ${this.id}`);
   }
 
   addPlayer(playerId, playerName) {
@@ -435,13 +454,13 @@ class BattleRoom {
       score: 0,
       joinedAt: Date.now()
     });
-    console.log(`[Battle Room ${this.id}] Player ${playerName} added. Total: ${this.players.size}`);
+    pushLog('battle', `[Battle Room ${this.id}] Player ${playerName} added. Total: ${this.players.size}`);
     return true;
   }
 
   removePlayer(playerId) {
     this.players.delete(playerId);
-    console.log(`[Battle Room ${this.id}] Player ${playerId} removed. Total: ${this.players.size}`);
+    pushLog('battle', `[Battle Room ${this.id}] Player ${playerId} removed. Total: ${this.players.size}`);
   }
 
   canStart() {
@@ -451,7 +470,7 @@ class BattleRoom {
   start() {
     this.gameState.status = 'playing';
     this.gameState.activePlayers = this.players.size;
-    console.log(`[Battle Room ${this.id}] Game started with ${this.players.size} players.`);
+    pushLog('battle', `[Battle Room ${this.id}] Game started with ${this.players.size} players.`);
   }
 
   getState() {
@@ -487,7 +506,7 @@ function setupWebSocketServer(server) {
 
   wsServer.on('connection', (socket, req) => {
     const clientIp = req.socket.remoteAddress;
-    console.log(`[WS] Client connected from ${clientIp}`);
+    pushLog('ws', `[WS] Client connected from ${clientIp}`);
 
     let playerId = null;
     let roomId = null;
@@ -535,7 +554,7 @@ function setupWebSocketServer(server) {
           socket.scheduleId = sid;
           socket.playerId = message.playerId;
 
-          console.log(`[WS] Player ${message.playerId.slice(0,10)}... joined schedule ${sid}`);
+          pushLog('ws', `[WS] Player ${message.playerId.slice(0,10)}... joined schedule ${sid}`);
           socket.send(JSON.stringify({ type: 'joined_schedule', scheduleId: sid, startTime: wr.startTime }));
 
           if (!wr.timer) {
@@ -608,7 +627,7 @@ function setupWebSocketServer(server) {
             unmapSocketFromRoom(socket, roomId);
             if (room.isEmpty()) {
               battleRooms.delete(roomId);
-              console.log(`[Battle] Room ${roomId} is empty and has been deleted.`);
+              pushLog('battle', `[Battle] Room ${roomId} is empty and has been deleted.`);
             } else {
               broadcastToRoom(roomId, {
                 type: 'player_left',
@@ -639,7 +658,7 @@ function setupWebSocketServer(server) {
           unmapSocketFromRoom(socket, roomId);
           if (room.isEmpty()) {
             battleRooms.delete(roomId);
-            console.log(`[Battle] Room ${roomId} is empty and has been deleted.`);
+            pushLog('battle', `[Battle] Room ${roomId} is empty and has been deleted.`);
           } else {
             broadcastToRoom(roomId, {
               type: 'player_left',
@@ -649,7 +668,7 @@ function setupWebSocketServer(server) {
           }
         }
       }
-      console.log(`[WS] Client disconnected`);
+      pushLog('ws', `[WS] Client disconnected`);
     });
 
     socket.on('error', (error) => {
@@ -664,7 +683,7 @@ function findOrCreateBattleRoom() {
   // Find a room that's not full and waiting
   for (const room of battleRooms.values()) {
     if (room.gameState.status === 'waiting' && !room.isFull()) {
-      console.log(`[Battle] Found waiting room ${room.id}. Joining.`);
+      pushLog('battle', `[Battle] Found waiting room ${room.id}. Joining.`);
       return room;
     }
   }
@@ -718,7 +737,7 @@ function startBattleSchedule(scheduleId) {
 
   // Ranked Mode: Just release players to play locally
   if (scheduleId.startsWith('ranked')) {
-    console.log(`[Ranked] Schedule ${scheduleId} starting. Releasing ${wr.sockets.size} players.`);
+    pushLog('ranked', `[Ranked] Schedule ${scheduleId} starting. Releasing ${wr.sockets.size} players.`);
     if (!scheduleHistory.has(scheduleId)) scheduleHistory.set(scheduleId, new Set());
     const history = scheduleHistory.get(scheduleId);
 
@@ -734,7 +753,7 @@ function startBattleSchedule(scheduleId) {
   }
 
   // Battle Mode: Create multiplayer rooms
-  console.log(`[Battle] Schedule ${scheduleId} starting. Creating room for ${wr.sockets.size} players.`);
+  pushLog('battle', `[Battle] Schedule ${scheduleId} starting. Creating room for ${wr.sockets.size} players.`);
   const room = new BattleRoom(nextRoomId++, 4);
   battleRooms.set(room.id, room);
   for (const [pid, sock] of wr.sockets) {
@@ -749,19 +768,19 @@ function startBattleSchedule(scheduleId) {
 }
 
 server.listen(PORT, () => {
-  console.log(`Snake game server listening on port ${PORT}`);
+  pushLog('system', `Snake game server listening on port ${PORT}`);
   
   // Setup WebSocket server
   const wsServer = setupWebSocketServer(server);
   if (wsServer) {
-    console.log(`WebSocket server ready for battle mode`);
+    pushLog('system', `WebSocket server ready for battle mode`);
   }
   
   if (LOCAL_DEV) {
-    console.log("Local dev mode enabled - using mock endpoints");
+    pushLog('system', "Local dev mode enabled - using mock endpoints");
     // Pre-populate game state with mock transactions on start
     mockStore.transactions.forEach(tx => snakeGame.processTransaction(tx));
-    console.log(`Processed ${mockStore.transactions.length} initial mock transactions.`);
+    pushLog('system', `Processed ${mockStore.transactions.length} initial mock transactions.`);
   }
   console.log(`Open http://localhost:${PORT}/`);
   // Start polling the chain for real transactions

@@ -752,6 +752,7 @@
     const CLASSIC = 'classic';
     const RANKED = 'ranked';
     const BATTLE = 'battle';
+    const DAILY = 'daily';
     const BATTLE_COLORS = ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4d96ff', '#c74ce6'];
 
     const APP_PUBKEY = localStorage.getItem('snake:app_pubkey') || 'ut1zvhmxlhmv95cgzaph6cpv0rrcrn29gr4xkdj9fuykc6648hmvgksmkfua6';
@@ -806,6 +807,15 @@
       const hours = Math.floor(diffMins / 60);
       const mins = diffMins % 60;
       return `${hours}h ${mins}m`;
+    }
+
+    function formatCountdown(timestamp) {
+      const diff = Math.max(0, Math.floor((timestamp - Date.now()) / 1000));
+      const h = Math.floor(diff / 3600);
+      const m = Math.floor((diff % 3600) / 60);
+      const s = diff % 60;
+      if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m`;
+      return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     }
 
     function isScheduleAvailable(scheduleId, queuedSet) {
@@ -868,10 +878,16 @@
       const [schedules, setSchedules] = useState([]);
       const [selectedSchedule, setSelectedSchedule] = useState(null);
       const [queuedSchedules, setQueuedSchedules] = useState(new Set());
+      const [showProfile, setShowProfile] = useState(false);
+      const [username, setUsername] = useState(localStorage.getItem('snake:username') || '');
+      const [waitingInfo, setWaitingInfo] = useState({});
+      const [showLeaveConfirm, setShowLeaveConfirm] = useState(null);
+      const [showClassicSave, setShowClassicSave] = useState(false);
 
       const canvasRef = useRef(null);
       const gameLoopRef = useRef(null);
       const timerRef = useRef(null);
+      const dailyRngRef = useRef(null);
 
       useEffect(() => {
         const a = localStorage.getItem('snake:user_address');
@@ -887,6 +903,16 @@
       }, []);
 
       useEffect(() => {
+        if (!addr) return;
+        fetch(`/__snake/profile?address=${encodeURIComponent(addr)}`).then(r => r.json()).then(data => {
+          if (data && data.username) {
+            setUsername(data.username);
+            localStorage.setItem('snake:username', data.username);
+          }
+        }).catch(() => {});
+      }, [addr]);
+
+      useEffect(() => {
         const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
         const wsUrl = `${protocol}://${window.location.host}/__battle`;
         const socket = new WebSocket(wsUrl);
@@ -898,7 +924,7 @@
             if (msg.type === 'joined_schedule') {
               // no action needed, already queued
             } else if (msg.type === 'schedule_state') {
-              // could display waiting players count
+              setWaitingInfo(prev => ({ ...prev, [msg.scheduleId]: { startTime: msg.startTime, players: msg.players || [] } }));
             } else if (msg.type === 'schedule_started') {
               handleScheduleStart(msg.scheduleId);
             } else if (msg.type === 'error') {
@@ -916,6 +942,13 @@
         return () => socket.close();
       }, []);
 
+      useEffect(() => {
+        const t = setInterval(() => {
+          setSchedules(s => s ? s.map(sch => ({ ...sch })) : s);
+        }, 1000);
+        return () => clearInterval(t);
+      }, []);
+
       const fetchBoards = async () => {
         try {
           const res = await fetch('/__snake/leaderboard');
@@ -928,6 +961,53 @@
           console.error('Leaderboard fetch failed:', e);
         }
       };
+
+      const saveClassicScore = async () => {
+        try {
+          const usernameVal = localStorage.getItem('snake:username') || `user_${addr.slice(-6)}`;
+          const memo = JSON.stringify({ app: 'snake', type: 'classic_save', score, timestamp: Date.now(), username: usernameVal });
+          if (memo.length > 1024) throw new Error('Payload too large');
+          startProgressBar();
+          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
+          completeProgressBar();
+          setShowClassicSave(false);
+        } catch (e) {
+          console.error('Save failed', e);
+          setShowClassicSave(false);
+        }
+      };
+
+      const saveUsernameToChain = async (name) => {
+        try {
+          const memo = JSON.stringify({ app: 'snake', type: 'set_username', username: name });
+          if (memo.length > 1024) throw new Error('Payload too large');
+          startProgressBar();
+          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
+          completeProgressBar();
+          localStorage.setItem('snake:username', name);
+          setUsername(name);
+          setShowProfile(false);
+          if (addr) fetch(`/__snake/profile?address=${encodeURIComponent(addr)}`);
+        } catch (e) {
+          console.error('username save failed', e);
+        }
+      };
+
+      function seededRandom(seed) {
+        let s = seed >>> 0;
+        return function() {
+          s = (s * 1664525 + 1013904223) >>> 0;
+          return (s & 0x7fffffff) / 0x80000000;
+        };
+      }
+
+      function getDailySeed() {
+        const d = new Date();
+        const key = d.toISOString().slice(0,10);
+        let seed = 0;
+        for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0;
+        return seed;
+      }
 
       const connectWallet = async () => {
         try {
@@ -958,7 +1038,13 @@
 
       const initGame = () => {
         const snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
-        const food = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+        let food;
+        if (mode === DAILY) {
+          const rnd = dailyRngRef.current || seededRandom(getDailySeed());
+          food = { x: Math.floor(rnd() * GRID_SIZE), y: Math.floor(rnd() * GRID_SIZE) };
+        } else {
+          food = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+        }
         setGameState({ snake, food, dir: 'RIGHT', nextDir: 'RIGHT' });
         setScore(0);
       };
@@ -982,6 +1068,13 @@
 
       const startGame = async (m) => {
         setMode(m);
+        if (m === DAILY) {
+          dailyRngRef.current = seededRandom(getDailySeed());
+          setScreen('playing');
+          initGame();
+          setPlaying(true);
+          return;
+        }
         if (m === RANKED || m === BATTLE) {
           const upcomingSchedules = await fetchSchedules(m);
           setSchedules(upcomingSchedules);
@@ -998,7 +1091,7 @@
         setQueuedSchedules(prev => new Set([...prev, scheduleId]));
         setSelectedSchedule(scheduleId);
         if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'join_schedule', scheduleId, mode }));
+          ws.send(JSON.stringify({ type: 'join_schedule', scheduleId, mode, playerId: addr }));
         } else {
           const schedule = schedules.find(s => s.id === scheduleId);
           if (schedule) {
@@ -1007,6 +1100,22 @@
               handleScheduleStart(scheduleId);
             }, Math.min(waitTime, 3000));
           }
+        }
+      };
+
+      const leaveScheduleWithConfirm = (scheduleId) => {
+        setShowLeaveConfirm(scheduleId);
+      };
+
+      const confirmLeave = (scheduleId) => {
+        setQueuedSchedules(prev => {
+          const nxt = new Set(prev);
+          nxt.delete(scheduleId);
+          return nxt;
+        });
+        setShowLeaveConfirm(null);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'leave_schedule', scheduleId, playerId: addr }));
         }
       };
 
@@ -1074,7 +1183,9 @@
               if (allSegs.some(s => s.x === prev.food.x && s.y === prev.food.y)) return prev;
               let nf;
               do {
-                nf = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+                const r = mode === DAILY && dailyRngRef.current ? dailyRngRef.current() : Math.random();
+                const r2 = mode === DAILY && dailyRngRef.current ? dailyRngRef.current() : Math.random();
+                nf = { x: Math.floor(r * GRID_SIZE), y: Math.floor(r2 * GRID_SIZE) };
               } while (allSegs.some(s => s.x === nf.x && s.y === nf.y));
               return { ...prev, food: nf };
             });
@@ -1108,7 +1219,9 @@
 
                 let nf;
                 do {
-                  nf = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+                  const r = mode === DAILY && dailyRngRef.current ? dailyRngRef.current() : Math.random();
+                  const r2 = mode === DAILY && dailyRngRef.current ? dailyRngRef.current() : Math.random();
+                  nf = { x: Math.floor(r * GRID_SIZE), y: Math.floor(r2 * GRID_SIZE) };
                 } while (ns.some(s => s.x === nf.x && s.y === nf.y));
                 return { ...prev, snake: ns, food: nf, dir };
               }
@@ -1283,6 +1396,7 @@
           if (w && w.id === 0) submitScore(w.food);
           setScreen('game-over');
         } else {
+          setShowClassicSave(true);
           setScreen('game-over');
         }
       }, [playing]);
@@ -1316,6 +1430,60 @@
       return (
         <div className="container">
           {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+          {showProfile && (
+            <div className="modal-overlay" onClick={() => setShowProfile(false)}>
+              <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <div className="modal-title">
+                  <span>Profile</span>
+                  <button className="modal-close" onClick={() => setShowProfile(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <h3>Display Name</h3>
+                  <input value={username} onChange={e => setUsername(e.target.value)} style={{ width: '100%', padding: '8px', marginTop: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--fg)' }} />
+                  <div className="modal-buttons">
+                    <button className="btn" onClick={() => saveUsernameToChain(username)}>Save to chain</button>
+                    <button className="btn" onClick={() => { localStorage.setItem('snake:username', username); setShowProfile(false); }}>Save locally</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showLeaveConfirm && (
+            <div className="modal-overlay" onClick={() => setShowLeaveConfirm(null)}>
+              <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <div className="modal-title">
+                  <span>Leave Queue?</span>
+                  <button className="modal-close" onClick={() => setShowLeaveConfirm(null)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <p>Are you sure you want to leave the waiting room?</p>
+                  <div className="modal-buttons">
+                    <button className="btn" onClick={() => confirmLeave(showLeaveConfirm)}>Yes, leave</button>
+                    <button className="btn" onClick={() => setShowLeaveConfirm(null)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showClassicSave && (
+            <div className="modal-overlay" onClick={() => setShowClassicSave(false)}>
+              <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <div className="modal-title">
+                  <span>Save Classic Score</span>
+                  <button className="modal-close" onClick={() => setShowClassicSave(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <p>Do you want to save your classic mode score to the chain?</p>
+                  <div className="modal-buttons">
+                    <button className="btn" onClick={saveClassicScore}>Save</button>
+                    <button className="btn" onClick={() => setShowClassicSave(false)}>No</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           <header className="header">
             <div className="logo">🐍 Snake</div>
@@ -1325,9 +1493,14 @@
                 Wallet
               </button>
               {connected && (
-                <div className="wallet-badge">
-                  ✓ {addr ? `${addr.slice(0, 5)}...${addr.slice(-6)}` : 'Connected'}
-                </div>
+                <>
+                  <button className="btn" onClick={() => setShowProfile(true)}>Profile</button>
+                  <button className="btn" onClick={() => window.open('/__logs?type=battle', '_blank')}>Battle Logs</button>
+                  <button className="btn" onClick={() => window.open('/__logs?type=ranked', '_blank')}>Ranked Logs</button>
+                  <div className="wallet-badge">
+                    ✓ {addr ? `${addr.slice(0, 5)}...${addr.slice(-6)}` : 'Connected'}
+                  </div>
+                </>
               )}
             </div>
           </header>
@@ -1366,6 +1539,11 @@
                       <div className="mode-title">Battle</div>
                       <div className="mode-desc">Multiplayer • Compete vs AI</div>
                     </div>
+                    <div className="mode-card" onClick={() => startGame(DAILY)}>
+                      <div className="mode-icon">📅</div>
+                      <div className="mode-title">Daily Challenge</div>
+                      <div className="mode-desc">Same seed for everyone • New every day</div>
+                    </div>
                   </div>
                   <button className="btn" onClick={() => setScreen('welcome')} style={{ marginTop: '16px' }}>
                     Back
@@ -1389,7 +1567,10 @@
                       const isQueued = queuedSchedules.has(sched.id);
                       const hasOther = queuedSchedules.size > 0 && !isQueued;
                       const available = !isQueued && !hasOther;
-                      const timeStr = formatScheduleTime(sched.startTime);
+                      const localDisplay = new Date(sched.startTime).toLocaleString([], { hour: '2-digit', minute: '2-digit' });
+                      const wi = waitingInfo[sched.id];
+                      const countdown = wi ? formatCountdown(wi.startTime) : formatCountdown(sched.startTime);
+                      const playersCount = wi ? (wi.players || []).length : (sched.playerCount || 0);
 
                       return (
                         <div
@@ -1398,14 +1579,19 @@
                           onClick={() => available && joinSchedule(sched.id)}
                           style={{ cursor: available ? 'pointer' : 'default', opacity: available ? 1 : 0.55 }}
                         >
-                          <div className="schedule-time">{sched.displayTime}</div>
+                          <div className="schedule-time">{localDisplay}</div>
                           <div className={`schedule-status ${isQueued ? 'queued' : 'available'}`}>
                             {isQueued ? '✓ Queued' : '〇 Available'}
                           </div>
                           {isQueued && <div className="schedule-queued-text">You are in queue</div>}
                           <div className="schedule-status" style={{ marginTop: '4px' }}>
-                            {timeStr}
+                            Starts in {countdown} • Players: {playersCount}
                           </div>
+                          {isQueued && (
+                            <button className="btn" style={{ marginTop: '8px' }} onClick={(e) => { e.stopPropagation(); leaveScheduleWithConfirm(sched.id); }}>
+                              Leave Queue
+                            </button>
+                          )}
                         </div>
                       );
                     })}

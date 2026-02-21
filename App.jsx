@@ -401,11 +401,13 @@ export default function App() {
   }
 
   const leaveWaitingRoom = () => {
-    if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
+    if (window.confirm('Are you sure you want to leave the waiting room?')) {
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      setScreen('mode-select')
     }
-    setScreen('mode-select')
   }
 
   // ============ GAME LOOP (CLASSIC/RANKED) ============
