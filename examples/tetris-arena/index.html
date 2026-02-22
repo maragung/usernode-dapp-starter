@@ -190,6 +190,8 @@
       grid-template-columns: repeat(4, 1fr);
       gap: 4px;
       justify-content: center;
+      width: fit-content;
+      margin: 0 auto;
     }
     .next-piece-cell {
       width: 28px;
@@ -270,11 +272,7 @@
       gap: 8px;
       align-items: center;
       padding: 8px 0;
-      border-bottom: 1px solid var(--border);
       font-size: 12px;
-    }
-    .leaderboard-entry:last-child {
-      border-bottom: none;
     }
     .leaderboard-entry.my-rank {
       background: rgba(110, 168, 254, 0.1);
@@ -362,6 +360,63 @@
       outline: none;
       border-color: var(--accent);
     }
+    .top-scores-modal .modal-content {
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .top-scores-modal .modal {
+      max-width: 600px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .scores-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+    }
+    .score-item {
+      display: grid;
+      grid-template-columns: 30px 1fr 80px;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .score-item:last-child {
+      border-bottom: none;
+    }
+    .score-rank {
+      font-weight: 700;
+      color: var(--accent);
+      text-align: center;
+    }
+    .score-name {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .score-name.my-score {
+      color: var(--fg);
+      font-weight: 600;
+    }
+    .score-points {
+      font-weight: 700;
+      color: var(--fg);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .score-item.my-score-row {
+      background: rgba(110, 168, 254, 0.1);
+      padding: 10px 6px;
+      border-radius: 6px;
+      margin: 4px 0;
+    }
     .mobile-controls {
       display: none;
       flex-direction: column;
@@ -369,11 +424,73 @@
       margin-top: 16px;
     }
     @media (max-width: 768px) {
-      .mobile-controls {
-        display: flex;
-      }
       .game-container {
-        grid-template-columns: 65% 1fr;
+        grid-template-columns: 65% 35%;
+        gap: 8px;
+        padding: 8px;
+      }
+      .sidebar-panel {
+        padding: 8px;
+      }
+      .panel-title {
+        font-size: 10px;
+        margin: 0 0 4px;
+      }
+      .leaderboard {
+        max-height: 150px;
+        font-size: 11px;
+      }
+      .stats {
+        gap: 4px;
+      }
+      .stat {
+        gap: 4px;
+      }
+      .controls {
+        gap: 4px;
+      }
+      .controls .btn {
+        padding: 6px 8px;
+        font-size: 11px;
+      }
+      .game-board {
+        padding: 4px;
+      }
+      .next-piece-container {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2px;
+        transform: scale(0.8);
+        transform-origin: top center;
+      }
+      .next-piece-cell {
+        width: 11px;
+        height: 11px;
+      }
+      .stat-label {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: transparent;
+        font-size: 0;
+      }
+      .stat-label::before {
+        content: attr(data-emoji);
+        font-size: 16px;
+        color: var(--fg);
+      }
+      .stat-value {
+        font-size: 16px;
+      }
+      .mobile-instructions {
+        display: none;
+      }
+      .mobile-dpad {
+        width: 72px;
+        transform: scale(0.4);
+        transform-origin: top center;
+        margin: 0 auto;
       }
     }
     .mobile-dpad {
@@ -513,23 +630,23 @@
           <div class="panel-title">Stats</div>
           <div class="stats">
             <div class="stat">
-              <span class="stat-label">Score</span>
+              <span class="stat-label" data-emoji="📊">Score</span>
               <span class="stat-value highlight" id="scoreValue">0</span>
             </div>
             <div class="stat">
-              <span class="stat-label">Level</span>
+              <span class="stat-label" data-emoji="⬆️">Level</span>
               <span class="stat-value" id="levelValue">1</span>
             </div>
             <div class="stat">
-              <span class="stat-label">Lines</span>
+              <span class="stat-label" data-emoji="🎯">Lines</span>
               <span class="stat-value" id="linesValue">0</span>
             </div>
             <div class="stat">
-              <span class="stat-label">Personal Best</span>
+              <span class="stat-label" data-emoji="🏆">Personal Best</span>
               <span class="stat-value" id="bestValue">0</span>
             </div>
             <div class="stat">
-              <span class="stat-label">My Rank</span>
+              <span class="stat-label" data-emoji="⭐">My Rank</span>
               <span class="stat-value" id="myRankValue">-</span>
             </div>
           </div>
@@ -542,6 +659,7 @@
             <button class="btn btn-secondary" id="pauseBtn" disabled>Pause</button>
             <button class="btn btn-secondary" id="resumeBtn" disabled>Resume</button>
             <button class="btn btn-secondary" id="profileBtn">My Profile</button>
+            <button class="btn btn-secondary" id="topScoresBtn">🏆</button>
           </div>
         </div>
 
@@ -551,6 +669,10 @@
         </div>
 
         <div class="mobile-controls">
+          <div class="mobile-instructions" style="text-align: center; font-size: 4px; color: var(--muted); margin-bottom: 8px; line-height: 1.4;">
+            <div>Double tap to rotate</div>
+            <div>Swipe to move</div>
+          </div>
           <div class="mobile-dpad">
             <button class="dpad-btn dpad-spacer" disabled></button>
             <button class="dpad-btn" id="btnRotate" data-action="rotate">↻</button>
@@ -578,6 +700,16 @@
         <button class="btn btn-primary" id="saveScoreBtn">Save to Chain</button>
         <button class="btn btn-secondary" id="playAgainBtn">Play Again</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="topScoresModal">
+    <div class="modal">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Top Scores</h2>
+        <button class="btn btn-secondary" id="closeTopScoresBtn" style="padding: 4px 8px; font-size: 14px;">×</button>
+      </div>
+      <div class="scores-list" id="scoresList"></div>
     </div>
   </div>
 
@@ -844,6 +976,46 @@
       domStatus.className = 'status-bar';
       if (level === 'error') domStatus.classList.add('error');
       if (level === 'ok') domStatus.classList.add('ok');
+    }
+
+    async function renderTopScores() {
+      try {
+        const params = new URLSearchParams({ address: myUserAddress });
+        const data = await fetch(`/__game/state?${params}`)
+          .then(r => r.json()).catch(() => ({ leaderboard: [], usernames: {}, myRank: null }));
+
+        const leaderboard = data.leaderboard || [];
+        const usernames = data.usernames || {};
+
+        const domScoresList = document.getElementById('scoresList');
+        domScoresList.innerHTML = '';
+
+        leaderboard.forEach((entry, idx) => {
+          const isMyScore = entry.address === myUserAddress;
+          const div = document.createElement('div');
+          div.className = 'score-item';
+          if (isMyScore) div.classList.add('my-score-row');
+
+          const rank = document.createElement('div');
+          rank.className = 'score-rank';
+          rank.textContent = (idx + 1);
+
+          const name = document.createElement('div');
+          name.className = 'score-name';
+          const displayName = usernames[entry.address] || 'user_' + entry.address.slice(-6);
+          name.textContent = displayName;
+          if (isMyScore) name.classList.add('my-score');
+
+          const points = document.createElement('div');
+          points.className = 'score-points';
+          points.textContent = entry.score.toLocaleString();
+
+          div.append(rank, name, points);
+          domScoresList.appendChild(div);
+        });
+      } catch (e) {
+        console.error('Top scores error:', e);
+      }
     }
 
     async function renderLeaderboard() {
@@ -1166,10 +1338,26 @@
       domProfileModal.classList.add('show');
     });
 
+    document.getElementById('topScoresBtn').addEventListener('click', () => {
+      renderTopScores();
+      document.getElementById('topScoresModal').classList.add('show');
+    });
+
+    document.getElementById('closeTopScoresBtn').addEventListener('click', () => {
+      document.getElementById('topScoresModal').classList.remove('show');
+    });
+
+    document.getElementById('topScoresModal').addEventListener('click', (e) => {
+      if (e.target.id === 'topScoresModal') {
+        document.getElementById('topScoresModal').classList.remove('show');
+      }
+    });
+
     domSaveScoreBtn.addEventListener('click', saveScoreToChain);
     domPlayAgainBtn.addEventListener('click', () => {
       domGameOverModal.classList.remove('show');
       domTxProgress.classList.add('hide');
+      startGame();
     });
 
     domUserPill.addEventListener('click', () => {
@@ -1190,6 +1378,64 @@
       if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); rotatePiece(); }
       if (e.key === ' ') { e.preventDefault(); if (gameState.running && gameState.paused) resumeGame(); else if (gameState.running) pauseGame(); }
     });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let lastTapTime = 0;
+    let lastTapX = 0;
+    let lastTapY = 0;
+    const DOUBLE_TAP_THRESHOLD = 300;
+    const SWIPE_THRESHOLD = 25;
+
+    domBoard.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+
+      const currentTime = Date.now();
+      const tapDistance = Math.sqrt(
+        Math.pow(touchStartX - lastTapX, 2) + 
+        Math.pow(touchStartY - lastTapY, 2)
+      );
+
+      if (currentTime - lastTapTime < DOUBLE_TAP_THRESHOLD && tapDistance < 50) {
+        rotatePiece();
+        lastTapTime = 0;
+      } else {
+        lastTapTime = currentTime;
+        lastTapX = touchStartX;
+        lastTapY = touchStartY;
+      }
+    }, false);
+
+    domBoard.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+    }, { passive: false });
+
+    domBoard.addEventListener('touchend', (e) => {
+      if (e.changedTouches.length === 0) return;
+      const touchEndX = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
+
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+      const absDeltaX = Math.abs(deltaX);
+      const absDeltaY = Math.abs(deltaY);
+
+      if (absDeltaX > SWIPE_THRESHOLD || absDeltaY > SWIPE_THRESHOLD) {
+        if (absDeltaX > absDeltaY) {
+          if (deltaX < 0) {
+            moveLeft();
+          } else {
+            moveRight();
+          }
+        } else if (absDeltaY > 0) {
+          if (deltaY > 0) {
+            softDrop();
+          }
+        }
+      }
+    }, false);
 
     document.getElementById('btnLeft').addEventListener('click', moveLeft);
     document.getElementById('btnRight').addEventListener('click', moveRight);
