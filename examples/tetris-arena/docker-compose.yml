@@ -1,14 +1,12 @@
-version: '3.8'
+version: "3.8"
 
 services:
   tetris-arena:
     build: .
     environment:
       - NODE_ENV=production
-      - PORT=3333
-      - APP_PUBKEY=${APP_PUBKEY:-ut1_tetris_arena_demo_pk_}
-      - NODE_RPC_URL=${NODE_RPC_URL:-http://localhost:3000}
-      - EXPLORER_UPSTREAM=${EXPLORER_UPSTREAM:-alpha2.usernodelabs.org}
+      - APP_PUBKEY=${APP_PUBKEY}
+      - NODE_RPC_URL=${NODE_RPC_URL:-https://alpha2.usernodelabs.org}
     ports:
       - "3333:3333"
-    restart: unless-stopped
+    restart: always

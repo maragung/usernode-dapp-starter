@@ -1,5 +1,0 @@
-🎮 Tetris Arena running: http://localhost:3333
-📊 Game state: http://localhost:3333/__game/state
-🔗 App address: ut1_tetris_arena_demo_pk_
-(node:40647) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
-(Use `node --trace-deprecation ...` to show where the warning was created)

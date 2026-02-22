@@ -1,17 +1,13 @@
 {
   "name": "tetris-arena",
   "version": "1.0.0",
-  "description": "Tetris game on Usernode blockchain with leaderboard",
+  "description": "Tetris Arena - Decentralized Tetris Game on Usernode",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js --local-dev"
   },
-  "dependencies": {
-    "dotenv": "^16.0.3"
-  },
-  "engines": {
-    "node": ">=16.0.0"
-  }
+  "keywords": ["tetris", "game", "blockchain", "usernode"],
+  "author": "",
+  "license": "MIT"
 }

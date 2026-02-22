@@ -57,13 +57,11 @@
       overflow: hidden;
     }
     main {
-      height: 100vh;
-      height: 100dvh;
+      height: 100%;
       display: flex;
       flex-direction: column;
-      max-height: 100vh;
-      max-height: 100dvh;
     }
+    /* ──────────── HEADER ──────────────── */
     .header {
       background: linear-gradient(135deg, var(--card) 0%, var(--card-hover) 100%);
       border-bottom: 1px solid var(--border);
@@ -105,26 +103,28 @@
     .user-pill:hover {
       background: rgba(255,255,255,0.16);
     }
+    /* ──────────── MAIN CONTAINER ──────────────── */
     .game-container {
-      flex: 1 1 auto;
+      flex: 1;
       min-height: 0;
       display: grid;
       grid-template-columns: 1fr;
       gap: 16px;
       padding: 16px;
-      overflow: hidden;
+      overflow: auto;
     }
+    /* Desktop: side-by-side */
     @media (min-width: 768px) {
       .game-container {
-        grid-template-columns: 1fr 300px;
+        grid-template-columns: 1fr 320px;
       }
     }
+    /* ──────────── GAME BOARD ──────────────── */
     .game-board-wrapper {
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start;
       min-height: 0;
-      min-width: 0;
     }
     .game-board {
       background: var(--card);
@@ -134,11 +134,12 @@
       display: grid;
       grid-template-columns: repeat(10, 1fr);
       gap: 1px;
-      aspect-ratio: 10 / 20;
-      height: 100%;
-      width: auto;
+      width: fit-content;
+      max-height: 100%;
     }
     .game-cell {
+      width: 30px;
+      height: 30px;
       background: rgba(255,255,255,0.04);
       border: 1px solid var(--border);
       border-radius: 2px;
@@ -162,13 +163,20 @@
       background: var(--border);
       border-style: dashed;
     }
+    /* Responsive: smaller cells on mobile */
+    @media (max-width: 480px) {
+      .game-cell {
+        width: 24px;
+        height: 24px;
+      }
+    }
+    /* ──────────── SIDEBAR ──────────────── */
     .sidebar {
       display: flex;
       flex-direction: column;
       gap: 12px;
       max-height: 100%;
       overflow-y: auto;
-      min-width: 0;
     }
     .sidebar-panel {
       background: var(--card);
@@ -256,10 +264,23 @@
     .btn-secondary:hover:not(:disabled) {
       background: var(--border);
     }
+    .btn-danger {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: var(--danger);
+      color: #fff;
+    }
     .btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .btn-small {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    /* ──────────── LEADERBOARD ──────────────── */
     .leaderboard {
       max-height: 200px;
       overflow-y: auto;
@@ -304,6 +325,7 @@
       font-variant-numeric: tabular-nums;
       text-align: right;
     }
+    /* ──────────── MODAL ──────────────── */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -362,6 +384,7 @@
       outline: none;
       border-color: var(--accent);
     }
+    /* ──────────── MOBILE CONTROLS ──────────────── */
     .mobile-controls {
       display: none;
       flex-direction: column;
@@ -373,7 +396,7 @@
         display: flex;
       }
       .game-container {
-        grid-template-columns: 65% 1fr;
+        grid-template-columns: 1fr;
       }
     }
     .mobile-dpad {
@@ -412,6 +435,7 @@
     .dpad-spacer {
       visibility: hidden;
     }
+    /* ──────────── STATUS MESSAGE ──────────────── */
     .status-bar {
       background: var(--card);
       border-top: 1px solid var(--border);
@@ -427,6 +451,7 @@
     .status-bar.error {
       color: var(--danger);
     }
+    /* ──────────── PROGRESS BAR ──────────────── */
     .tx-progress {
       width: 100%;
       margin: 12px 0;
@@ -469,6 +494,7 @@
     .tx-progress.hide {
       display: none;
     }
+    /* ──────────── SCROLLBAR STYLING ──────────────── */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -504,11 +530,13 @@
       </div>
 
       <div class="sidebar">
+        <!-- Next Piece -->
         <div class="sidebar-panel">
           <div class="panel-title">Next Piece</div>
           <div class="next-piece-container" id="nextPieceContainer"></div>
         </div>
 
+        <!-- Stats -->
         <div class="sidebar-panel">
           <div class="panel-title">Stats</div>
           <div class="stats">
@@ -535,6 +563,7 @@
           </div>
         </div>
 
+        <!-- Controls -->
         <div class="sidebar-panel">
           <div class="panel-title">Controls</div>
           <div class="controls">
@@ -545,11 +574,13 @@
           </div>
         </div>
 
+        <!-- Leaderboard -->
         <div class="sidebar-panel">
           <div class="panel-title">Top Scores</div>
           <div class="leaderboard" id="leaderboard"></div>
         </div>
 
+        <!-- Mobile controls -->
         <div class="mobile-controls">
           <div class="mobile-dpad">
             <button class="dpad-btn dpad-spacer" disabled></button>
@@ -566,6 +597,7 @@
     <div class="status-bar" id="statusBar">Ready to play</div>
   </main>
 
+  <!-- Modals -->
   <div class="modal-overlay" id="gameOverModal">
     <div class="modal">
       <h2>Game Over!</h2>
@@ -609,6 +641,9 @@
   </div>
 
   <script>
+    /* ──────────────────────────────────────────────────────── */
+    /* STANDARD DAPP HELPERS (Copy-paste from AGENTS.md)        */
+    /* ──────────────────────────────────────────────────────── */
     function parseMemo(m) {
       if (m == null) return null;
       try { return JSON.parse(String(m)); } catch (_) { return null; }
@@ -647,13 +682,16 @@
       return { tx, memo };
     }
 
+    /* ──────────────────────────────────────────────────────── */
+    /* TETRIS GAME CONFIG                                        */
+    /* ──────────────────────────────────────────────────────── */
     const APP_PUBKEY = window.localStorage.getItem("tetris:app_pubkey") || "ut1_tetrisarena_default_pubkey";
     const TX_SEND_OPTS = { timeoutMs: 90000, pollIntervalMs: 1500 };
     const GRID_WIDTH = 10;
     const GRID_HEIGHT = 20;
     const BASE_TICK_MS = 800;
-    const MIN_ROW_BEFORE_GAME_OVER = -1;
 
+    /* Tetromino shapes (row, col offsets from pivot) */
     const TETROMINOES = {
       I: { color: 'I', blocks: [[0,0], [0,1], [0,2], [0,3]] },
       J: { color: 'J', blocks: [[0,0], [1,0], [1,1], [1,2]] },
@@ -665,6 +703,9 @@
       Z: { color: 'Z', blocks: [[0,0], [0,1], [1,1], [1,2]] },
     };
 
+    /* ──────────────────────────────────────────────────────── */
+    /* GLOBAL STATE                                             */
+    /* ──────────────────────────────────────────────────────── */
     let gameState = {
       grid: Array(GRID_HEIGHT).fill(null).map(() => Array(GRID_WIDTH).fill(null)),
       currentPiece: null,
@@ -683,15 +724,20 @@
 
     let myUserAddress = null;
     let personalBest = parseInt(localStorage.getItem("tetris:personalBest") || "0", 10);
+
     let gameLoopTimeout = null;
     let statusMessage = "Ready to play";
 
+    /* Progress bar state */
     const TX_PB_EXPECTED_S = 30;
     const TX_PB_WARN_S = 45;
     const TX_PB_ERR_S = 90;
     let _pbRaf = null;
     let _pbStart = 0;
 
+    /* ──────────────────────────────────────────────────────── */
+    /* DOM ELEMENTS                                              */
+    /* ──────────────────────────────────────────────────────── */
     const domBoard = document.getElementById('gameBoard');
     const domNextPiece = document.getElementById('nextPieceContainer');
     const domScore = document.getElementById('scoreValue');
@@ -722,6 +768,9 @@
     const domCloseProfileBtn = document.getElementById('closeProfileBtn');
     const domUsernameProgress = document.getElementById('usernameProgress');
 
+    /* ──────────────────────────────────────────────────────── */
+    /* PROGRESS BAR FUNCTIONS                                    */
+    /* ──────────────────────────────────────────────────────── */
     function pbPercent(s) {
       if (s <= TX_PB_EXPECTED_S) {
         const t = s / TX_PB_EXPECTED_S;
@@ -782,6 +831,9 @@
       if (_pbRaf) { cancelAnimationFrame(_pbRaf); _pbRaf = null; }
     }
 
+    /* ──────────────────────────────────────────────────────── */
+    /* UI UPDATES                                                */
+    /* ──────────────────────────────────────────────────────── */
     function renderBoard() {
       domBoard.innerHTML = '';
       for (let r = 0; r < GRID_HEIGHT; r++) {
@@ -805,7 +857,7 @@
         const c = p.col + dc;
         if (r >= 0 && r < GRID_HEIGHT && c >= 0 && c < GRID_WIDTH) {
           const idx = r * GRID_WIDTH + c;
-          if (idx >= 0 && idx < domBoard.children.length) {
+          if (idx < domBoard.children.length) {
             domBoard.children[idx].classList.add(p.type, 'active');
           }
         }
@@ -889,6 +941,9 @@
       }
     }
 
+    /* ──────────────────────────────────────────────────────── */
+    /* GAME LOGIC                                                */
+    /* ──────────────────────────────────────────────────────── */
     function getRandomTetromino() {
       const keys = Object.keys(TETROMINOES);
       return keys[Math.floor(Math.random() * keys.length)];
@@ -900,7 +955,7 @@
       }
       gameState.currentPiece = {
         type: gameState.nextPiece,
-        row: MIN_ROW_BEFORE_GAME_OVER,
+        row: 0,
         col: 3,
       };
       gameState.nextPiece = getRandomTetromino();
@@ -916,10 +971,8 @@
       return tetro.blocks.every(([dr, dc]) => {
         const r = piece.row + dr;
         const c = piece.col + dc;
-        if (r >= GRID_HEIGHT) return false;
-        if (c < 0 || c >= GRID_WIDTH) return false;
-        if (r >= 0 && gameState.grid[r][c] !== null) return false;
-        return true;
+        return r >= 0 && r < GRID_HEIGHT && c >= 0 && c < GRID_WIDTH &&
+               (gameState.grid[r][c] === null);
       });
     }
 
@@ -933,23 +986,16 @@
     }
 
     function clearLines() {
-      const rowsToClear = [];
-      for (let r = 0; r < GRID_HEIGHT; r++) {
+      let clearedCount = 0;
+      for (let r = GRID_HEIGHT - 1; r >= 0; r--) {
         if (gameState.grid[r].every(cell => cell !== null)) {
-          rowsToClear.push(r);
-        }
-      }
-
-      for (let i = rowsToClear.length - 1; i >= 0; i--) {
-        gameState.grid.splice(rowsToClear[i], 1);
-      }
-
-      const clearedCount = rowsToClear.length;
-      if (clearedCount > 0) {
-        for (let i = 0; i < clearedCount; i++) {
+          gameState.grid.splice(r, 1);
           gameState.grid.unshift(Array(GRID_WIDTH).fill(null));
+          clearedCount++;
         }
+      }
 
+      if (clearedCount > 0) {
         const linePoints = [0, 100, 300, 500, 800];
         const points = (linePoints[clearedCount] || 800) * gameState.level;
         gameState.score += points;
@@ -988,11 +1034,9 @@
         gameState.currentPiece.row--;
         placePiece();
         clearLines();
-        updateStats();
         spawnPiece();
-      } else {
-        renderBoard();
       }
+      renderBoard();
     }
 
     function rotatePiece() {
@@ -1076,6 +1120,9 @@
       setStatus('Game over!', 'error');
     }
 
+    /* ──────────────────────────────────────────────────────── */
+    /* BLOCKCHAIN INTERACTIONS                                   */
+    /* ──────────────────────────────────────────────────────── */
     async function saveScoreToChain() {
       const memo = JSON.stringify({
         app: 'tetrisarena',
@@ -1138,13 +1185,14 @@
       try {
         startProgressBar(domUsernameProgress);
         domSaveUsernameBtn.disabled = true;
+        domSkipUsernameBtn.disabled = true;
 
         await sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
         completeProgressBar(domUsernameProgress);
         setStatus('Username saved!', 'ok');
 
         setTimeout(() => {
-          domProfileModal.classList.remove('show');
+          domUsernameModal.classList.remove('show');
           domUsernameProgress.classList.add('hide');
           renderLeaderboard();
         }, 1200);
@@ -1154,9 +1202,13 @@
         setStatus('Failed to save username: ' + (e.message || e), 'error');
       } finally {
         domSaveUsernameBtn.disabled = false;
+        domSkipUsernameBtn.disabled = false;
       }
     }
 
+    /* ──────────────────────────────────────────────────────── */
+    /* EVENT LISTENERS                                           */
+    /* ──────────────────────────────────────────────────────── */
     domStartBtn.addEventListener('click', startGame);
     domPauseBtn.addEventListener('click', pauseGame);
     domResumeBtn.addEventListener('click', resumeGame);
@@ -1183,6 +1235,7 @@
       domProfileModal.classList.remove('show');
     });
 
+    /* Keyboard controls */
     document.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowLeft') { e.preventDefault(); moveLeft(); }
       if (e.key === 'ArrowRight') { e.preventDefault(); moveRight(); }
@@ -1191,17 +1244,25 @@
       if (e.key === ' ') { e.preventDefault(); if (gameState.running && gameState.paused) resumeGame(); else if (gameState.running) pauseGame(); }
     });
 
+    /* Mobile controls */
     document.getElementById('btnLeft').addEventListener('click', moveLeft);
     document.getElementById('btnRight').addEventListener('click', moveRight);
     document.getElementById('btnDrop').addEventListener('click', softDrop);
     document.getElementById('btnRotate').addEventListener('click', rotatePiece);
 
+    /* ──────────────────────────────────────────────────────── */
+    /* INITIALIZATION                                            */
+    /* ──────────────────────────────────────────────────────── */
     async function init() {
       try {
+        // Get user address
         myUserAddress = await getNodeAddress();
         localStorage.setItem('tetris:myAddress', myUserAddress);
         domUserDisplay.textContent = 'user_' + myUserAddress.slice(-6);
+
+        // Load leaderboard
         await renderLeaderboard();
+
         setStatus('Ready to play', 'ok');
       } catch (e) {
         console.error('Init error:', e);
@@ -1209,7 +1270,9 @@
       }
     }
 
+    // Refresh leaderboard every 4 seconds
     setInterval(renderLeaderboard, 4000);
+
     init();
   </script>
 </body>
