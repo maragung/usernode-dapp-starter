@@ -1,0 +1,11 @@
+services:
+  merge-master:
+    container_name: merge-master
+    build: .
+    environment:
+      PORT: "3310"
+      APP_PUBKEY: ${APP_PUBKEY:-ut1_merge_master_default_pubkey}
+      SCORE_ATTEST_SECRET: ${SCORE_ATTEST_SECRET:-change-this-in-production}
+    ports:
+      - "3310:3310"
+    restart: unless-stopped

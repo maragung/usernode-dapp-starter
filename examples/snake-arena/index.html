@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>Snake Arena</title>
+  <script src="/usernode-bridge.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f16;
+      --fg: #e7edf7;
+      --muted: #a8b3c7;
+      --card: #141b26;
+      --border: rgba(255, 255, 255, 0.12);
+      --accent: #6ea8fe;
+      --primary: #6366f1;
+      --danger: #ff6b6b;
+      --ok: #5dd39e;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      overflow: hidden;
+      position: fixed;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+    }
+
+    .header {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo {
+      font-weight: 800;
+      font-size: 14px;
+      background: linear-gradient(135deg, #6EA8FE 0%, #A78BFA 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .wallet-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-family: monospace;
+      color: var(--muted);
+    }
+
+    .btn {
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      touch-action: manipulation;
+      background: rgba(99, 102, 241, 0.2);
+      color: var(--accent);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+    }
+
+    .btn:active {
+      background: rgba(99, 102, 241, 0.4);
+    }
+
+    .content {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .welcome-screen {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .welcome-title {
+      font-size: 42px;
+      font-weight: 900;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #6EA8FE 0%, #A78BFA 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .welcome-text {
+      color: var(--muted);
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .mode-select-screen {
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      gap: 16px;
+    }
+
+    .modes-grid {
+      display: grid;
+      gap: 12px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .mode-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 18px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .mode-card:active {
+      transform: scale(0.97);
+    }
+
+    .mode-card:hover {
+      border-color: var(--accent);
+      background: rgba(110, 168, 254, 0.05);
+    }
+
+    .mode-icon {
+      font-size: 32px;
+      margin-bottom: 6px;
+    }
+
+    .mode-title {
+      font-weight: 700;
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+
+    .mode-desc {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .game-layout {
+      display: flex;
+      flex-direction: column;
+      width: 90%;
+      height: 92.5%;
+      margin: 2.5% 5% 5%;
+      justify-content: space-between;
+    }
+
+    @media (min-width: 1024px) {
+      .game-layout {
+        flex-direction: row;
+      }
+
+      .game-canvas-section {
+        flex: 0 0 60%;
+        border-right: 1px solid var(--border);
+      }
+
+      .game-info-section {
+        flex: 0 0 25%;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 16px;
+        gap: 16px;
+      }
+    }
+
+    @media (max-width: 1023px) {
+      .game-info-section {
+        display: none;
+      }
+    }
+
+    .game-canvas-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .game-canvas-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      width: 80%;
+      height: 80%;
+      min-height: 0;
+      margin: 0 auto;
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      border: none;
+      box-shadow: none;
+    }
+
+    .game-overlay {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      display: flex;
+      gap: 8px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .game-stat {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      padding: 6px 10px;
+      min-width: 80px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .exit-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      z-index: 5;
+    }
+
+    .game-info-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+
+    .game-over-screen {
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .game-over-score {
+      font-size: 44px;
+      font-weight: 900;
+      color: var(--ok);
+      margin-bottom: 12px;
+    }
+
+    .leaderboard {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .lb-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .lb-tab {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      padding: 10px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .lb-tab.active {
+      color: var(--accent);
+      background: rgba(110,168,254,0.08);
+    }
+
+    .lb-list {
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .lb-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .lb-rank {
+      width: 36px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .lb-info {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+    }
+
+    .lb-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--fg);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lb-addr {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: monospace;
+    }
+
+    .lb-score {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ok);
+      min-width: 48px;
+      text-align: right;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(0,0,0,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-box {
+      width: min(560px, 100%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .modal-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 800;
+    }
+
+    .modal-close {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .modal-body {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .modal-body h3 {
+      color: var(--fg);
+      font-size: 14px;
+    }
+
+    .modal-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .profile-wallet {
+      margin-top: 2px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .profile-wallet-label {
+      color: var(--fg);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .profile-wallet-value {
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      word-break: break-all;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .tx-progress {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+      height: 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.09);
+      overflow: hidden;
+      z-index: 20;
+    }
+
+    .tx-progress.hide {
+      display: none;
+    }
+
+    .tx-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--accent);
+      transition: width .35s ease;
+    }
+
+    .tx-fill.ok {
+      background: var(--ok);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    const GRID_SIZE = 20;
+    const GAME_LOOP_INTERVAL = 170;
+    const CLASSIC = 'classic';
+    const RANKED = 'ranked';
+    const BATTLE = 'battle';
+    const DAILY = 'daily';
+    const BATTLE_COLORS = ['#6ea8fe', '#ff6b6b', '#ffd93d', '#6bcf7f'];
+    const APP_PUBKEY = localStorage.getItem('snake:app_pubkey') || 'ut1zvhmxlhmv95cgzaph6cpv0rrcrn29gr4xkdj9fuykc6648hmvgksmkfua6';
+    const TX_SEND_OPTS = { timeoutMs: 90000, pollIntervalMs: 1500 };
+    const TX_PB_EXPECTED_S = 30;
+    const WASM_ADD_BYTES = new Uint8Array([
+      0x00,0x61,0x73,0x6d,0x01,0x00,0x00,0x00,
+      0x01,0x07,0x01,0x60,0x02,0x7f,0x7f,0x01,0x7f,
+      0x03,0x02,0x01,0x00,
+      0x07,0x07,0x01,0x03,0x61,0x64,0x64,0x00,0x00,
+      0x0a,0x09,0x01,0x07,0x00,0x20,0x00,0x20,0x01,0x6a,0x0b,
+    ]);
+    const wasmMath = (() => {
+      try {
+        const mod = new WebAssembly.Module(WASM_ADD_BYTES);
+        const ins = new WebAssembly.Instance(mod, {});
+        const add = ins.exports && ins.exports.add;
+        if (typeof add === 'function') return { add: (a, b) => add(a | 0, b | 0) | 0 };
+      } catch (_) {}
+      return { add: (a, b) => ((a | 0) + (b | 0)) | 0 };
+    })();
+    let wasmSeed = (Date.now() ^ 0x9e3779b9) >>> 0;
+    function wasmRandom() {
+      wasmSeed = (wasmMath.add(((wasmSeed * 1664525) >>> 0), 1013904223) >>> 0);
+      return wasmSeed / 0x100000000;
+    }
+
+    function seededRandom(seed) {
+      let s = seed >>> 0;
+      return function () {
+        s = (wasmMath.add(((s * 1664525) >>> 0), 1013904223) >>> 0);
+        return (s & 0x7fffffff) / 0x80000000;
+      };
+    }
+
+    function getDailySeed() {
+      const d = new Date();
+      const key = d.toISOString().slice(0, 10);
+      let seed = 0;
+      for (let i = 0; i < key.length; i++) {
+        seed = (seed * 31 + key.charCodeAt(i)) >>> 0;
+      }
+      return seed;
+    }
+
+    function randomCell(rng) {
+      return {
+        x: Math.floor(rng() * GRID_SIZE),
+        y: Math.floor(rng() * GRID_SIZE),
+      };
+    }
+
+    function wrapPoint(p) {
+      return {
+        x: (p.x + GRID_SIZE) % GRID_SIZE,
+        y: (p.y + GRID_SIZE) % GRID_SIZE,
+      };
+    }
+
+    function moveFrom(point, dir) {
+      const p = { x: point.x, y: point.y };
+      if (dir === 'UP') p.y -= 1;
+      if (dir === 'DOWN') p.y += 1;
+      if (dir === 'LEFT') p.x -= 1;
+      if (dir === 'RIGHT') p.x += 1;
+      return wrapPoint(p);
+    }
+
+    function isOpposite(a, b) {
+      return (a === 'UP' && b === 'DOWN') ||
+        (a === 'DOWN' && b === 'UP') ||
+        (a === 'LEFT' && b === 'RIGHT') ||
+        (a === 'RIGHT' && b === 'LEFT');
+    }
+
+    function cpuDirection(player, food, occupiedSet, blockedDirs) {
+      const dirs = ['UP', 'DOWN', 'LEFT', 'RIGHT'].filter((d) => !isOpposite(d, player.dir));
+      const head = player.snake[0];
+      const dx = food.x - head.x;
+      const dy = food.y - head.y;
+
+      const horizontalToward = dx >= 0 ? 'RIGHT' : 'LEFT';
+      const verticalToward = dy >= 0 ? 'DOWN' : 'UP';
+      const horizontalAlt = horizontalToward === 'RIGHT' ? 'LEFT' : 'RIGHT';
+      const verticalAlt = verticalToward === 'DOWN' ? 'UP' : 'DOWN';
+
+      const baseOrder = player.routeMode === 'verticalFirst'
+        ? [verticalToward, horizontalToward, verticalAlt, horizontalAlt]
+        : [horizontalToward, verticalToward, horizontalAlt, verticalAlt];
+
+      const unique = [];
+      baseOrder.forEach((dir) => {
+        if (!dirs.includes(dir)) return;
+        if (!unique.includes(dir)) unique.push(dir);
+      });
+      dirs.forEach((dir) => {
+        if (!unique.includes(dir)) unique.push(dir);
+      });
+
+      const safe = unique.filter((dir) => {
+        const next = moveFrom(head, dir);
+        return !occupiedSet.has(`${next.x},${next.y}`);
+      });
+      if (safe.length === 0) return unique[0] || player.dir;
+
+      const preferred = safe.filter((dir) => !blockedDirs || !blockedDirs.has(dir));
+      return (preferred[0] || safe[0] || player.dir);
+    }
+
+    function foodFor(snakes, rng) {
+      const blocked = new Set();
+      snakes.forEach((s) => s.forEach((seg) => blocked.add(`${seg.x},${seg.y}`)));
+      let next = randomCell(rng);
+      let attempts = 0;
+      while (blocked.has(`${next.x},${next.y}`) && attempts < 1000) {
+        next = randomCell(rng);
+        attempts += 1;
+      }
+      return next;
+    }
+
+    let pbRaf = null;
+    let pbStart = 0;
+
+    function startProgressBar() {
+      const el = document.getElementById('txProgress');
+      if (!el) return;
+      el.classList.remove('hide');
+      const fill = el.querySelector('.tx-fill');
+      if (fill) {
+        fill.style.width = '0%';
+        fill.className = 'tx-fill';
+      }
+      pbStart = performance.now();
+      const tick = () => {
+        const elapsed = (performance.now() - pbStart) / 1000;
+        const pct = elapsed <= TX_PB_EXPECTED_S
+          ? 95 * (1 - Math.pow(1 - elapsed / TX_PB_EXPECTED_S, 3))
+          : 95 + 5 * (1 - Math.exp(-(elapsed - TX_PB_EXPECTED_S) / 120));
+        if (fill) fill.style.width = `${Math.min(100, pct)}%`;
+        pbRaf = requestAnimationFrame(tick);
+      };
+      pbRaf = requestAnimationFrame(tick);
+    }
+
+    function stopProgressBar(success) {
+      if (pbRaf) {
+        cancelAnimationFrame(pbRaf);
+        pbRaf = null;
+      }
+      const el = document.getElementById('txProgress');
+      if (!el) return;
+      const fill = el.querySelector('.tx-fill');
+      if (success && fill) {
+        fill.style.width = '100%';
+        fill.className = 'tx-fill ok';
+        setTimeout(() => el.classList.add('hide'), 900);
+      } else {
+        el.classList.add('hide');
+      }
+    }
+
+    function App() {
+      const [screen, setScreen] = useState('welcome');
+      const [mode, setMode] = useState(null);
+      const [gameState, setGameState] = useState(null);
+      const [playing, setPlaying] = useState(false);
+      const [score, setScore] = useState(0);
+      const [players, setPlayers] = useState(null);
+      const [addr, setAddr] = useState(null);
+      const [connected, setConnected] = useState(false);
+      const [leaderboard, setLeaderboard] = useState([]);
+      const [battleBoard, setBattleBoard] = useState([]);
+      const [activeTab, setActiveTab] = useState('ranked');
+      const [submitting, setSubmitting] = useState(false);
+      const [showHelp, setShowHelp] = useState(false);
+      const [showProfile, setShowProfile] = useState(false);
+      const [username, setUsername] = useState(localStorage.getItem('snake:username') || '');
+      const [savePrompt, setSavePrompt] = useState(null);
+
+      const canvasRef = useRef(null);
+      const gameLoopRef = useRef(null);
+      const dailyRngRef = useRef(null);
+      const battleTickRef = useRef(0);
+      const runStartedAtRef = useRef(0);
+
+      useEffect(() => {
+        const saved = localStorage.getItem('snake:user_address');
+        if (saved) {
+          setAddr(saved);
+          setConnected(true);
+        } else {
+          connectWallet();
+        }
+        fetchBoards();
+        const interval = setInterval(fetchBoards, 5000);
+        return () => clearInterval(interval);
+      }, []);
+
+      useEffect(() => {
+        if (!addr) return;
+        fetch(`/__snake/profile?address=${encodeURIComponent(addr)}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data && data.username) {
+              setUsername(data.username);
+              localStorage.setItem('snake:username', data.username);
+            }
+          })
+          .catch(() => {});
+      }, [addr]);
+
+      const fetchBoards = async () => {
+        try {
+          const res = await fetch('/__snake/leaderboard');
+          if (!res.ok) return;
+          const data = await res.json();
+          setLeaderboard(data.scores || []);
+          setBattleBoard(data.battleScores || []);
+        } catch (_) {}
+      };
+
+      const connectWallet = async () => {
+        try {
+          if (window.usernode?.getNodeAddress) {
+            const a = await window.usernode.getNodeAddress();
+            setAddr(a);
+            setConnected(true);
+            localStorage.setItem('snake:user_address', a);
+            return;
+          }
+          const mockAddr = localStorage.getItem('usernode:mockAddress') || `ut1_local_${Math.floor(wasmRandom() * 1e9).toString(36)}`;
+          localStorage.setItem('usernode:mockAddress', mockAddr);
+          localStorage.setItem('snake:user_address', mockAddr);
+          setAddr(mockAddr);
+          setConnected(true);
+        } catch (_) {
+          const mockAddr = `ut1_local_${Math.floor(wasmRandom() * 1e9).toString(36)}`;
+          localStorage.setItem('usernode:mockAddress', mockAddr);
+          localStorage.setItem('snake:user_address', mockAddr);
+          setAddr(mockAddr);
+          setConnected(true);
+        }
+      };
+
+      const saveUsernameToChain = async (name) => {
+        const value = String(name || '').trim();
+        if (!value) return;
+        try {
+          const memo = JSON.stringify({ app: 'snake', type: 'set_username', username: value });
+          if (memo.length > 1024) return;
+          startProgressBar();
+          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
+          stopProgressBar(true);
+          localStorage.setItem('snake:username', value);
+          setUsername(value);
+          setShowProfile(false);
+        } catch (_) {
+          stopProgressBar(false);
+        }
+      };
+
+      const startSoloGame = (m) => {
+        const snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+        const rng = m === DAILY ? (dailyRngRef.current || seededRandom(getDailySeed())) : wasmRandom;
+        if (m === DAILY) dailyRngRef.current = seededRandom(getDailySeed());
+        runStartedAtRef.current = Date.now();
+        const food = foodFor([snake], rng);
+        setMode(m);
+        setScore(0);
+        setPlayers(null);
+        setGameState({ snake, food, dir: 'RIGHT', nextDir: 'RIGHT' });
+        setScreen('playing');
+        setPlaying(true);
+      };
+
+      const startBattleGame = () => {
+        runStartedAtRef.current = Date.now();
+        const human = {
+          id: 0,
+          name: 'You',
+          isHuman: true,
+          alive: true,
+          food: 0,
+          dir: 'RIGHT',
+          nextDir: 'RIGHT',
+          snake: [{ x: 4, y: 4 }, { x: 3, y: 4 }, { x: 2, y: 4 }],
+        };
+        const cpu1 = {
+          id: 1,
+          name: 'CPU 1',
+          isHuman: false,
+          alive: true,
+          food: 0,
+          dir: 'LEFT',
+          nextDir: 'LEFT',
+          routeMode: 'horizontalFirst',
+          nextRerouteTick: 14,
+          snake: [{ x: 15, y: 15 }, { x: 16, y: 15 }, { x: 17, y: 15 }],
+        };
+        const cpu2 = {
+          id: 2,
+          name: 'CPU 2',
+          isHuman: false,
+          alive: true,
+          food: 0,
+          dir: 'UP',
+          nextDir: 'UP',
+          routeMode: 'verticalFirst',
+          nextRerouteTick: 20,
+          snake: [{ x: 15, y: 4 }, { x: 15, y: 5 }, { x: 15, y: 6 }],
+        };
+        const all = [human, cpu1, cpu2];
+        const food = foodFor(all.map((p) => p.snake), wasmRandom);
+        battleTickRef.current = 0;
+        setMode(BATTLE);
+        setScore(0);
+        setPlayers(all);
+        setGameState({ food });
+        setScreen('playing');
+        setPlaying(true);
+      };
+
+      const startGame = (m) => {
+        if (m === BATTLE) {
+          startBattleGame();
+          return;
+        }
+        if (m === DAILY) {
+          dailyRngRef.current = seededRandom(getDailySeed());
+        }
+        startSoloGame(m);
+      };
+
+      useEffect(() => {
+        if (!playing || !gameState) return;
+
+        const tick = () => {
+          if (mode === BATTLE && players) {
+            setPlayers((prevPlayers) => {
+              if (!prevPlayers) return prevPlayers;
+              battleTickRef.current += 1;
+              const battleTick = battleTickRef.current;
+
+              const occupiedNow = new Set();
+              prevPlayers.forEach((p) => {
+                p.snake.forEach((seg) => occupiedNow.add(`${seg.x},${seg.y}`));
+              });
+
+              const aiState = new Map();
+              prevPlayers
+                .filter((p) => !p.isHuman && p.alive)
+                .forEach((cpu) => {
+                  let routeMode = cpu.routeMode || (cpu.id % 2 === 0 ? 'verticalFirst' : 'horizontalFirst');
+                  let nextRerouteTick = cpu.nextRerouteTick || 14;
+                  if (battleTick >= nextRerouteTick) {
+                    routeMode = routeMode === 'horizontalFirst' ? 'verticalFirst' : 'horizontalFirst';
+                    nextRerouteTick = battleTick + 10 + Math.floor(wasmRandom() * 10);
+                  }
+                  aiState.set(cpu.id, { routeMode, nextRerouteTick });
+                });
+
+              const usedCpuDirs = new Set();
+              const cpuPlans = new Map();
+              prevPlayers
+                .filter((p) => !p.isHuman && p.alive)
+                .sort((a, b) => a.id - b.id)
+                .forEach((cpu) => {
+                  const state = aiState.get(cpu.id) || {};
+                  const dir = cpuDirection({ ...cpu, ...state }, gameState.food, occupiedNow, usedCpuDirs);
+                  cpuPlans.set(cpu.id, dir);
+                  usedCpuDirs.add(dir);
+                });
+
+              const movePlan = new Map();
+              prevPlayers.forEach((p) => {
+                if (!p.alive) return;
+                const nextDir = p.isHuman ? p.nextDir : (cpuPlans.get(p.id) || p.nextDir || p.dir);
+                const moveDir = isOpposite(nextDir, p.dir) ? p.dir : nextDir;
+                const nextHead = moveFrom(p.snake[0], moveDir);
+                const eat = nextHead.x === gameState.food.x && nextHead.y === gameState.food.y;
+                const bodyAfterTailMove = eat ? p.snake : p.snake.slice(0, -1);
+                movePlan.set(p.id, { moveDir, nextHead, eat, bodyAfterTailMove });
+              });
+
+              const nextPlayers = prevPlayers.map((p) => {
+                if (!p.alive) return p;
+
+                const plan = movePlan.get(p.id);
+                if (!plan) return p;
+
+                const { moveDir, nextHead, eat, bodyAfterTailMove } = plan;
+                const nextKey = `${nextHead.x},${nextHead.y}`;
+
+                const ownBodyCollision = bodyAfterTailMove
+                  .slice(1)
+                  .some((seg) => `${seg.x},${seg.y}` === nextKey);
+                const collide = ownBodyCollision;
+                if (collide) {
+                  return { ...p, alive: false };
+                }
+
+                const grown = [{ x: nextHead.x, y: nextHead.y }, ...p.snake];
+                if (!eat) {
+                  grown.pop();
+                }
+
+                const updated = {
+                  ...p,
+                  ...(p.isHuman ? {} : (aiState.get(p.id) || {})),
+                  dir: moveDir,
+                  nextDir: moveDir,
+                  snake: grown,
+                  food: eat ? p.food + 1 : p.food,
+                };
+
+                if (eat && p.isHuman) {
+                  setScore((s) => s + 10);
+                }
+
+                return updated;
+              });
+
+              const aliveHuman = nextPlayers.find((p) => p.id === 0)?.alive;
+              const aliveCpu = nextPlayers.filter((p) => !p.isHuman && p.alive).length;
+              if (!aliveHuman || aliveCpu === 0) {
+                setPlaying(false);
+              }
+
+              const foodEaten = nextPlayers.some((p, i) => p.food !== prevPlayers[i].food);
+              if (foodEaten) {
+                const aliveSnakes = nextPlayers.filter((p) => p.alive).map((p) => p.snake);
+                setGameState((prev) => ({ ...prev, food: foodFor(aliveSnakes, wasmRandom) }));
+              }
+
+              return nextPlayers;
+            });
+            return;
+          }
+
+          setGameState((prev) => {
+            if (!prev || !prev.snake) return prev;
+            const desired = isOpposite(prev.nextDir, prev.dir) ? prev.dir : prev.nextDir;
+            const nextHead = moveFrom(prev.snake[0], desired);
+            if (prev.snake.some((seg) => seg.x === nextHead.x && seg.y === nextHead.y)) {
+              setPlaying(false);
+              return prev;
+            }
+            const nextSnake = [{ x: nextHead.x, y: nextHead.y }, ...prev.snake];
+            const ate = nextHead.x === prev.food.x && nextHead.y === prev.food.y;
+            if (!ate) {
+              nextSnake.pop();
+            } else {
+              setScore((s) => s + 10);
+            }
+            const rng = mode === DAILY && dailyRngRef.current ? dailyRngRef.current : wasmRandom;
+            const nextFood = ate ? foodFor([nextSnake], rng) : prev.food;
+            return { ...prev, snake: nextSnake, dir: desired, food: nextFood };
+          });
+        };
+
+        gameLoopRef.current = setInterval(tick, GAME_LOOP_INTERVAL);
+        return () => clearInterval(gameLoopRef.current);
+      }, [playing, gameState, mode, players]);
+
+      useEffect(() => {
+        if (!playing) return;
+
+        const handleKey = (e) => {
+          const map = {
+            ArrowUp: 'UP',
+            ArrowDown: 'DOWN',
+            ArrowLeft: 'LEFT',
+            ArrowRight: 'RIGHT',
+            KeyW: 'UP',
+            KeyS: 'DOWN',
+            KeyA: 'LEFT',
+            KeyD: 'RIGHT',
+          };
+          if (!map[e.code]) return;
+          e.preventDefault();
+          if (mode === BATTLE) {
+            setPlayers((prev) => prev?.map((p) => (p.id === 0 ? { ...p, nextDir: map[e.code] } : p)) || prev);
+            return;
+          }
+          setGameState((prev) => ({ ...prev, nextDir: map[e.code] }));
+        };
+
+        let touchStart = { x: 0, y: 0 };
+        const handleTouch = (e) => {
+          if (e.type === 'touchstart') {
+            touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            return;
+          }
+          const dx = e.touches[0].clientX - touchStart.x;
+          const dy = e.touches[0].clientY - touchStart.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 10) return;
+          const angle = Math.atan2(dy, dx);
+          const dir =
+            angle > -0.785 && angle < 0.785 ? 'RIGHT' :
+            angle > 0.785 && angle < 2.356 ? 'DOWN' :
+            angle > 2.356 || angle < -2.356 ? 'LEFT' : 'UP';
+          if (mode === BATTLE) {
+            setPlayers((prev) => prev?.map((p) => (p.id === 0 ? { ...p, nextDir: dir } : p)) || prev);
+          } else {
+            setGameState((prev) => ({ ...prev, nextDir: dir }));
+          }
+          touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        };
+
+        document.addEventListener('keydown', handleKey);
+        canvasRef.current?.addEventListener('touchstart', handleTouch);
+        canvasRef.current?.addEventListener('touchmove', handleTouch);
+
+        return () => {
+          document.removeEventListener('keydown', handleKey);
+          canvasRef.current?.removeEventListener('touchstart', handleTouch);
+          canvasRef.current?.removeEventListener('touchmove', handleTouch);
+        };
+      }, [playing, mode]);
+
+      useEffect(() => {
+        if (!canvasRef.current || !gameState) return;
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const parent = canvas.parentElement;
+        const w = parent.clientWidth;
+        const h = parent.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        ctx.scale(dpr, dpr);
+
+        const boardSize = Math.min(w, h);
+        const offsetX = (w - boardSize) / 2;
+        const offsetY = (h - boardSize) / 2;
+        const cell = boardSize / GRID_SIZE;
+
+        ctx.fillStyle = '#0a0d12';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.fillStyle = '#0a0d12';
+        ctx.fillRect(offsetX, offsetY, boardSize, boardSize);
+
+        ctx.strokeStyle = 'rgba(100, 150, 200, 0.05)';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < GRID_SIZE; i++) {
+          const p = offsetX + (i + 1) * cell;
+          const q = offsetY + (i + 1) * cell;
+          ctx.beginPath();
+          ctx.moveTo(p, offsetY);
+          ctx.lineTo(p, offsetY + boardSize);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(offsetX, q);
+          ctx.lineTo(offsetX + boardSize, q);
+          ctx.stroke();
+        }
+
+        if (mode === BATTLE && players) {
+          players.forEach((p, i) => {
+            if (!p.alive) return;
+            const col = BATTLE_COLORS[i % BATTLE_COLORS.length];
+            p.snake.forEach((seg, j) => {
+              const x = seg.x * cell;
+              const y = seg.y * cell;
+              ctx.fillStyle = j === 0 ? col : `${col}99`;
+              ctx.fillRect(offsetX + x + 1, offsetY + y + 1, cell - 2, cell - 2);
+            });
+          });
+        } else if (gameState.snake) {
+          gameState.snake.forEach((seg, i) => {
+            const x = seg.x * cell;
+            const y = seg.y * cell;
+            ctx.fillStyle = i === 0 ? '#6ea8fe' : `hsl(${150 + i * 10}, 70%, 50%)`;
+            ctx.fillRect(offsetX + x + 1, offsetY + y + 1, cell - 2, cell - 2);
+          });
+        }
+
+        const f = gameState.food;
+        const fx = offsetX + f.x * cell + cell / 2;
+        const fy = offsetY + f.y * cell + cell / 2;
+        ctx.fillStyle = '#ff6b6b';
+        ctx.beginPath();
+        ctx.arc(fx, fy, cell / 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }, [gameState, players, mode]);
+
+      useEffect(() => {
+        if (playing || screen !== 'playing') return;
+
+        const openPrompt = (payload) => {
+          setSavePrompt(payload);
+          setScreen('game-over');
+        };
+
+        const currentBattleScore = (players?.find((p) => p.id === 0)?.food || 0) * 10;
+
+        if (mode === RANKED || mode === DAILY) {
+          openPrompt({ kind: 'submit', title: 'Save Score', message: 'Do you want to save this score to the chain?', score, isBattle: false });
+          return;
+        }
+
+        if (mode === BATTLE) {
+          const me = players?.find((p) => p.id === 0);
+          const aliveCpu = players?.filter((p) => !p.isHuman && p.alive).length || 0;
+          const won = !!me?.alive && aliveCpu === 0;
+          if (won) {
+            openPrompt({ kind: 'submit', title: 'Save Victory Score', message: 'Do you want to save your battle victory score?', score: currentBattleScore, isBattle: true });
+          } else if (currentBattleScore > 0) {
+            openPrompt({ kind: 'submit', title: 'Save Battle Score', message: 'Do you want to save your current battle score?', score: currentBattleScore, isBattle: false });
+          } else {
+            setScreen('game-over');
+          }
+          return;
+        }
+
+        openPrompt({ kind: 'classic', title: 'Save Classic Score', message: 'Do you want to save your classic score to the chain?' });
+      }, [playing]);
+
+      const submitScore = async (value, isBattle) => {
+        setSubmitting(true);
+        try {
+          const durationMs = Math.max(1000, Date.now() - (runStartedAtRef.current || Date.now()));
+          const attestResp = await fetch('/__snake/attest-score', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              address: addr,
+              score: value,
+              mode: isBattle ? 'battle' : mode,
+              durationMs,
+            }),
+          });
+          const attest = await attestResp.json().catch(() => ({}));
+          if (!attestResp.ok || !attest || !attest.ok || !attest.memo) {
+            throw new Error((attest && attest.error) || 'Score verification failed');
+          }
+          const memo = JSON.stringify(attest.memo);
+          if (memo.length > 1024) throw new Error('Payload too large');
+          startProgressBar();
+          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
+          stopProgressBar(true);
+          await fetchBoards();
+          setTimeout(() => {
+            setScreen('game-over');
+            setSubmitting(false);
+          }, 900);
+        } catch (_) {
+          stopProgressBar(false);
+          setScreen('game-over');
+          setSubmitting(false);
+        }
+      };
+
+      const saveClassicScore = async () => {
+        if (!addr) {
+          setSavePrompt(null);
+          return;
+        }
+        try {
+          const durationMs = Math.max(1000, Date.now() - (runStartedAtRef.current || Date.now()));
+          const attestResp = await fetch('/__snake/attest-score', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ address: addr, score, mode: 'classic', durationMs }),
+          });
+          const attest = await attestResp.json().catch(() => ({}));
+          if (!attestResp.ok || !attest || !attest.ok || !attest.memo) {
+            throw new Error((attest && attest.error) || 'Score verification failed');
+          }
+          const memo = JSON.stringify(attest.memo);
+          if (memo.length > 1024) throw new Error('Payload too large');
+          startProgressBar();
+          await window.usernode.sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
+          stopProgressBar(true);
+        } catch (_) {
+          stopProgressBar(false);
+        }
+        setSavePrompt(null);
+      };
+
+      const confirmSavePrompt = async () => {
+        if (!savePrompt || submitting) return;
+        if (savePrompt.kind === 'classic') {
+          await saveClassicScore();
+          return;
+        }
+        await submitScore(savePrompt.score, !!savePrompt.isBattle);
+        setSavePrompt(null);
+      };
+
+      const skipSavePrompt = () => {
+        setSavePrompt(null);
+      };
+
+      const leaveGame = () => {
+        setPlaying(false);
+        clearInterval(gameLoopRef.current);
+        setScreen('game-over');
+      };
+
+      const displayScore = mode === BATTLE ? (players?.find((p) => p.id === 0)?.food || 0) * 10 : score;
+
+      return (
+        <div className="container">
+          {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+
+          {showProfile && (
+            <div className="modal-overlay" onClick={() => setShowProfile(false)}>
+              <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-title">
+                  <span>Profile</span>
+                  <button className="modal-close" onClick={() => setShowProfile(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <h3>Display Name</h3>
+                  <input
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--fg)' }}
+                  />
+                  <div className="profile-wallet">
+                    <div className="profile-wallet-label">Connected Wallet</div>
+                    <div className="profile-wallet-value">{addr || 'Not connected'}</div>
+                  </div>
+                  <div className="modal-buttons">
+                    <button className="btn" onClick={() => saveUsernameToChain(username)}>Save to chain</button>
+                    <button className="btn" onClick={() => { localStorage.setItem('snake:username', username); setShowProfile(false); }}>Save locally</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {savePrompt && (
+            <div className="modal-overlay" onClick={skipSavePrompt}>
+              <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-title">
+                  <span>{savePrompt.title}</span>
+                  <button className="modal-close" onClick={skipSavePrompt}>×</button>
+                </div>
+                <div className="modal-body">
+                  <p>{savePrompt.message}</p>
+                  <div className="modal-buttons">
+                    <button className="btn" onClick={confirmSavePrompt} disabled={submitting}>Save</button>
+                    <button className="btn" onClick={skipSavePrompt} disabled={submitting}>No</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <header className="header">
+            <div className="logo">🐍 Snake Arena</div>
+            <div className="header-right">
+              {screen !== 'playing' && <button className="btn" onClick={() => setShowHelp(true)}>Help</button>}
+              <button className="btn" onClick={connectWallet} style={{ display: connected ? 'none' : 'inline-flex' }}>Wallet</button>
+              {connected && (
+                <>
+                  <button className="btn" onClick={() => setShowProfile(true)}>Profile</button>
+                  <div className="wallet-badge">✓ {addr ? `${addr.slice(0, 5)}...${addr.slice(-6)}` : 'Connected'}</div>
+                </>
+              )}
+            </div>
+          </header>
+
+          <div className="content">
+            {screen === 'welcome' && (
+              <div className="screen welcome-screen">
+                <div className="welcome-title">🐍 SNAKE ARENA</div>
+                <div className="welcome-text">Play • Score • Compete</div>
+                <button className="btn" onClick={() => setScreen('mode-select')} style={{ fontSize: '14px', padding: '10px 24px' }}>Play Now</button>
+                <div style={{ marginTop: '24px', width: '100%', maxWidth: '480px' }}>
+                  <Leaderboard boards={{ leaderboard, battleBoard, activeTab, setActiveTab }} />
+                </div>
+              </div>
+            )}
+
+            {screen === 'mode-select' && (
+              <div className="screen mode-select-screen">
+                <div>
+                  <h2 style={{ fontSize: '20px', marginBottom: '16px', textAlign: 'center' }}>Select Mode</h2>
+                  <div className="modes-grid">
+                    <div className="mode-card" onClick={() => startGame(CLASSIC)}>
+                      <div className="mode-icon">🎮</div>
+                      <div className="mode-title">Classic</div>
+                      <div className="mode-desc">No leaderboard submission</div>
+                    </div>
+                    <div className="mode-card" onClick={() => startGame(RANKED)}>
+                      <div className="mode-icon">🏆</div>
+                      <div className="mode-title">Ranked</div>
+                      <div className="mode-desc">No timer • Submit high score</div>
+                    </div>
+                    <div className="mode-card" onClick={() => startGame(BATTLE)}>
+                      <div className="mode-icon">⚔️</div>
+                      <div className="mode-title">Battle</div>
+                      <div className="mode-desc">1 Player vs 2 CPU • Last alive wins</div>
+                    </div>
+                    <div className="mode-card" onClick={() => startGame(DAILY)}>
+                      <div className="mode-icon">📅</div>
+                      <div className="mode-title">Daily Challenge</div>
+                      <div className="mode-desc">Same map seed for everyone</div>
+                    </div>
+                  </div>
+                  <button className="btn" onClick={() => setScreen('welcome')} style={{ marginTop: '16px' }}>Back</button>
+                </div>
+              </div>
+            )}
+
+            {screen === 'playing' && (
+              <div className="game-layout">
+                <div className="game-canvas-section">
+                  <div className="game-canvas-area">
+                    <canvas ref={canvasRef}></canvas>
+
+                    <div className="game-overlay">
+                      <div className="game-stat">
+                        <div className="stat-label">Score</div>
+                        <div className="stat-value">{displayScore}</div>
+                      </div>
+                      {mode === BATTLE && (
+                        <div className="game-stat">
+                          <div className="stat-label">CPU Alive</div>
+                          <div className="stat-value">{players ? players.filter((p) => !p.isHuman && p.alive).length : 0}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <button className="btn exit-btn" onClick={leaveGame}>Exit</button>
+
+                    <div id="txProgress" className="tx-progress hide">
+                      <div className="tx-fill"></div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="game-info-section">
+                  <div className="game-info-panel">
+                    <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px' }}>Game Info</div>
+                    <div style={{ fontSize: '12px', gap: '8px', display: 'flex', flexDirection: 'column', color: 'var(--muted)' }}>
+                      <div>Mode: <span style={{ color: 'var(--accent)' }}>{mode.toUpperCase()}</span></div>
+                      <div>Score: <span style={{ color: 'var(--ok)' }}>{displayScore}</span></div>
+                      {mode === BATTLE && players && (
+                        <div>Alive: <span style={{ color: 'var(--accent)' }}>{players.filter((p) => p.alive).length}/{players.length}</span></div>
+                      )}
+                    </div>
+                  </div>
+
+                  {mode === BATTLE && players && (
+                    <div className="game-info-panel">
+                      <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px' }}>Players</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {players.map((p, i) => (
+                          <div key={p.id} style={{ fontSize: '12px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', borderLeft: `3px solid ${BATTLE_COLORS[i]}` }}>
+                            <div style={{ fontWeight: '700' }}>{p.isHuman ? 'You' : p.name} {!p.alive && '(OUT)'}</div>
+                            <div style={{ color: 'var(--muted)', fontSize: '11px', marginTop: '4px' }}>Food: {p.food}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="game-info-panel">
+                    <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px' }}>Controls</div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: '1.6' }}>
+                      <div><strong>PC:</strong> Arrow Keys or WASD</div>
+                      <div><strong>Mobile:</strong> Drag or swipe on the canvas</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {screen === 'game-over' && (
+              <div className="screen game-over-screen">
+                <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Game Over</h2>
+                <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '12px' }}>
+                  {mode === CLASSIC ? 'Classic Mode' : mode === RANKED ? 'Ranked Mode' : mode === DAILY ? 'Daily Challenge' : 'Battle Mode'}
+                </div>
+                <div className="game-over-score">{displayScore}</div>
+                <div style={{ marginBottom: '16px', width: '100%' }}>
+                  <Leaderboard boards={{ leaderboard, battleBoard, activeTab, setActiveTab }} />
+                </div>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={() => startGame(mode)} disabled={submitting}>Play Again</button>
+                  <button className="btn" onClick={() => setScreen('mode-select')} disabled={submitting}>Change Mode</button>
+                  <button className="btn" onClick={() => setScreen('welcome')} disabled={submitting}>Menu</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function Leaderboard({ boards: { leaderboard, battleBoard, activeTab, setActiveTab } }) {
+      const data = activeTab === 'ranked' ? leaderboard : battleBoard;
+      return (
+        <div className="leaderboard">
+          <div className="lb-tabs">
+            <button className={`lb-tab ${activeTab === 'ranked' ? 'active' : ''}`} onClick={() => setActiveTab('ranked')}>🏆 Ranked</button>
+            <button className={`lb-tab ${activeTab === 'battle' ? 'active' : ''}`} onClick={() => setActiveTab('battle')}>⚔️ Battle</button>
+          </div>
+          <div className="lb-list">
+            {data.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '12px', fontSize: '12px' }}>No scores yet</div>
+            ) : (
+              data.map((entry, i) => (
+                <div key={i} className="lb-row">
+                  <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</div>
+                  <div className="lb-info">
+                    <div className="lb-name">{entry.username || 'Anonymous'}</div>
+                    <div className="lb-addr">{entry.address?.slice(-8)}</div>
+                  </div>
+                  <div className="lb-score">{entry.score}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function HelpModal({ onClose }) {
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">
+              <span>Snake Arena Help</span>
+              <button className="modal-close" onClick={onClose}>×</button>
+            </div>
+            <div className="modal-body">
+              <h3>Controls</h3>
+              <p><strong>Mobile:</strong> Drag or swipe to change direction.</p>
+              <p><strong>PC:</strong> Use Arrow Keys or WASD.</p>
+              <h3>Modes</h3>
+              <ul>
+                <li><strong>Classic:</strong> Free play mode.</li>
+                <li><strong>Ranked:</strong> No timer. Your final score is submitted at game over.</li>
+                <li><strong>Battle:</strong> 1 player vs 2 CPU snakes. You win if you are the last alive.</li>
+                <li><strong>Daily Challenge:</strong> Same seeded map behavior for everyone on the same day.</li>
+              </ul>
+              <h3>Rules</h3>
+              <ul>
+                <li>Each food gives 10 points.</li>
+                <li>Snake grows after eating food.</li>
+                <li>Hitting a snake body eliminates that snake.</li>
+                <li>Edges wrap around to the opposite side.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
+                <li>Edges wrap around to the opposite side.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+services:
+  tetris-arena:
+    container_name: tetris-arena
+    build: .
+    environment:
+      NODE_ENV: production
+      PORT: "3333"
+      APP_PUBKEY: ${APP_PUBKEY:-ut1_tetrisarena_default_pubkey}
+      SCORE_ATTEST_SECRET: ${SCORE_ATTEST_SECRET:-change-this-in-production}
+      NODE_RPC_URL: ${NODE_RPC_URL:-https://alpha2.usernodelabs.org}
+    ports:
+      - "3333:3333"
+    restart: unless-stopped

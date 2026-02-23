@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Merge Master</title>
+  <script src="/usernode-bridge.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0b0f16;
+      --fg: #e7edf7;
+      --muted: #a8b3c7;
+      --card: #141b26;
+      --border: rgba(255,255,255,0.12);
+      --accent: #6ea8fe;
+      --ok: #5dd39e;
+      --danger: #ff6b6b;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7f8fb;
+        --fg: #0b1220;
+        --muted: #4b5568;
+        --card: #ffffff;
+        --border: rgba(15,23,42,0.12);
+        --accent: #2563eb;
+        --ok: #0f766e;
+        --danger: #c81e1e;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--fg); overflow: hidden;
+    }
+    .app {
+      height: 100vh; height: 100dvh;
+      display: flex; flex-direction: column;
+      padding: 10px; gap: 10px;
+      max-width: 1100px; margin: 0 auto;
+    }
+    .header {
+      flex: 0 0 auto; display: flex;
+      justify-content: space-between; align-items: center;
+      padding: 10px 14px; border: 1px solid var(--border);
+      border-radius: 14px; background: var(--card); gap: 10px;
+    }
+    .brand { display: flex; flex-direction: column; gap: 2px; }
+    .title { font-weight: 800; font-size: 18px; }
+    .sub { color: var(--muted); font-size: 11px; }
+    .headerRight { display: flex; gap: 8px; align-items: center; }
+    .wallet {
+      font-size: 11px; border: 1px solid var(--border);
+      border-radius: 999px; padding: 6px 10px; color: var(--muted);
+      font-family: ui-monospace, monospace;
+      max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .layout {
+      flex: 1 1 auto; min-height: 0;
+      display: grid; grid-template-columns: 1fr 300px; gap: 10px;
+    }
+    .panel {
+      border: 1px solid var(--border); border-radius: 14px;
+      background: var(--card); padding: 12px; min-height: 0;
+    }
+    .gamePanel {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+    }
+    .boardWrap { display: flex; align-items: center; justify-content: center; }
+    .board {
+      width: min(56vh, 420px); aspect-ratio: 1/1;
+      display: grid; grid-template-columns: repeat(4,1fr); grid-template-rows: repeat(4,1fr);
+      gap: 8px; padding: 8px; border-radius: 14px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    .tile {
+      border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; font-weight: 800;
+      font-size: clamp(14px, 3.5vw, 30px);
+    }
+    .t0    { background: rgba(255,255,255,0.05); }
+    .t2    { background: #eee4da; color: #776e65; }
+    .t4    { background: #ede0c8; color: #776e65; }
+    .t8    { background: #f2b179; color: #f9f6f2; }
+    .t16   { background: #f59563; color: #f9f6f2; }
+    .t32   { background: #f67c5f; color: #f9f6f2; }
+    .t64   { background: #f65e3b; color: #f9f6f2; }
+    .t128  { background: #edcf72; color: #f9f6f2; font-size: clamp(12px,3vw,26px); }
+    .t256  { background: #edcc61; color: #f9f6f2; font-size: clamp(12px,3vw,26px); }
+    .t512  { background: #edc850; color: #f9f6f2; font-size: clamp(12px,3vw,26px); }
+    .t1024 { background: #edc53f; color: #f9f6f2; font-size: clamp(10px,2.5vw,22px); }
+    .t2048 { background: #edc22e; color: #f9f6f2; font-size: clamp(10px,2.5vw,22px); }
+    .tbig  { background: #3c3a32; color: #f9f6f2; font-size: clamp(9px,2vw,18px); }
+    .arrowPad {
+      display: grid;
+      grid-template-areas: ". u ." "l . r" ". d .";
+      grid-template-columns: repeat(3,52px); grid-template-rows: repeat(3,52px); gap: 5px;
+    }
+    .arrowPad .au { grid-area: u; }
+    .arrowPad .al { grid-area: l; }
+    .arrowPad .ar { grid-area: r; }
+    .arrowPad .ad { grid-area: d; }
+    .arrowBtn {
+      border: 1px solid var(--border); border-radius: 10px;
+      background: rgba(255,255,255,0.05); color: var(--fg);
+      font-size: 18px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; user-select: none; -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    .arrowBtn:active { transform: scale(0.92); }
+    .sidePanel { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+    .stat {
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 8px 6px; text-align: center; background: rgba(255,255,255,0.02);
+    }
+    .statLabel { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+    .statVal { font-size: 18px; font-weight: 800; line-height: 1; }
+    .actions { display: flex; flex-direction: column; gap: 7px; }
+    .actDivider { border-top: 1px solid var(--border); margin: 2px 0; }
+    .actRow { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .btn {
+      border: 1px solid var(--border); border-radius: 9px;
+      background: rgba(255,255,255,0.04); color: var(--fg);
+      padding: 9px 12px; font-weight: 700; font-size: 13px;
+      cursor: pointer; text-align: center; line-height: 1.2;
+    }
+    .btn:active { opacity: 0.8; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn.primary {
+      background: color-mix(in srgb, var(--accent) 16%, transparent);
+      border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+      color: var(--accent);
+    }
+    .btn.danger {
+      background: color-mix(in srgb, var(--danger) 14%, transparent);
+      border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+      color: var(--danger);
+    }
+    .txProgress { margin: 2px 0; }
+    .txTrack { width: 100%; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+    .txFill { height: 100%; width: 0; border-radius: 3px; background: var(--accent); transition: width 0.35s ease-out, background 0.35s ease; }
+    .txFill.ok   { background: #6ef0a8; }
+    .txFill.warn { background: #e6a817; }
+    .txFill.err  { background: var(--danger); }
+    .txLabel { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .txLabel.warn { color: #e6a817; }
+    .txLabel.err  { color: var(--danger); }
+    .statusLine { font-size: 11px; color: var(--muted); min-height: 16px; }
+    .statusLine.ok  { color: var(--ok); }
+    .statusLine.err { color: var(--danger); }
+    .hide { display: none !important; }
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px; z-index: 200;
+    }
+    .modal {
+      width: min(460px,100%); background: var(--card);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 16px; display: flex; flex-direction: column; gap: 12px;
+      max-height: 90dvh; overflow-y: auto;
+    }
+    .menuModal { width: min(540px,100%); }
+    .modalHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .modalTitle { font-size: 17px; font-weight: 800; }
+    .modalText { font-size: 14px; color: var(--muted); line-height: 1.45; }
+    .modalBtns { display: flex; justify-content: flex-end; gap: 8px; }
+    .menuSection {
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 12px; display: flex; flex-direction: column; gap: 9px;
+      background: rgba(255,255,255,0.02);
+    }
+    .sectionTitle {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .affix {
+      display: grid; grid-template-columns: 1fr auto;
+      border: 1px solid var(--border); border-radius: 9px; overflow: hidden;
+    }
+    .affixInput {
+      background: transparent; color: var(--fg);
+      border: none; outline: none;
+      padding: 9px 11px; font-size: 13px; min-width: 0;
+    }
+    .affixSuffix {
+      padding: 9px 11px; border-left: 1px solid var(--border);
+      color: var(--muted); font-family: ui-monospace, monospace;
+      font-size: 12px; background: rgba(255,255,255,0.02);
+      display: flex; align-items: center; white-space: nowrap;
+    }
+    .usernameBadge {
+      font-size: 13px; font-weight: 700;
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 6px 11px; align-self: flex-start;
+    }
+    .profileRow { display: flex; gap: 7px; }
+    .lbList {
+      border: 1px solid var(--border); border-radius: 10px;
+      max-height: 260px; overflow-y: auto;
+    }
+    .lbRow {
+      display: grid; grid-template-columns: 36px 1fr auto;
+      gap: 7px; align-items: center; padding: 9px 10px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+    }
+    .lbRow:first-child { border-top: none; }
+    .lbRank { font-weight: 800; color: var(--muted); text-align: center; font-size: 13px; }
+    .lbInfo { min-width: 0; }
+    .lbName { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lbAddr { font-size: 10px; color: var(--muted); font-family: ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lbScore { font-size: 14px; font-weight: 800; color: var(--ok); white-space: nowrap; }
+    .lbEmpty { font-size: 12px; color: var(--muted); text-align: center; padding: 14px 8px; }
+    .myRank {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(255,255,255,0.02);
+      color: var(--fg);
+    }
+    @media (max-width: 700px) {
+      html, body { overflow: hidden; }
+      .app {
+        width: 96vw;
+        max-width: none;
+        margin: 0 2vw;
+        padding: 2vw 0;
+        gap: 8px;
+        height: 100dvh;
+      }
+      .header {
+        padding: 8px 10px;
+        border-radius: 12px;
+      }
+      .title { font-size: 16px; }
+      .sub { font-size: 10px; }
+      .wallet {
+        max-width: 120px;
+        font-size: 10px;
+        padding: 5px 8px;
+      }
+      .layout {
+        flex: 1 1 auto;
+        min-height: 0;
+        grid-template-columns: 60% 25%;
+        justify-content: space-between;
+        gap: 0;
+      }
+      .panel {
+        padding: 8px;
+        border-radius: 12px;
+      }
+      .gamePanel { gap: 8px; }
+      .board { width: min(58vw, 320px); }
+      .arrowPad { display: none; }
+      .sidePanel {
+        overflow-y: auto;
+        gap: 8px;
+      }
+      .stats {
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+      .stat {
+        padding: 6px 4px;
+      }
+      .statLabel { font-size: 9px; margin-bottom: 2px; }
+      .statVal { font-size: 14px; }
+      .actions { gap: 6px; }
+      .actRow { grid-template-columns: 1fr; gap: 6px; }
+      .btn {
+        padding: 7px 6px;
+        font-size: 10px;
+        border-radius: 8px;
+      }
+      .txLabel, .statusLine { font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="title">Merge Master</div>
+        <div class="sub">On-chain 2048 · Usernode</div>
+      </div>
+      <div class="headerRight">
+        <div class="wallet" id="walletBadge">Connecting…</div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel gamePanel">
+        <div class="boardWrap">
+          <div class="board" id="board"></div>
+        </div>
+        <div class="arrowPad">
+          <button class="arrowBtn au" id="btnUp">↑</button>
+          <button class="arrowBtn al" id="btnLeft">←</button>
+          <button class="arrowBtn ar" id="btnRight">→</button>
+          <button class="arrowBtn ad" id="btnDown">↓</button>
+        </div>
+      </section>
+
+      <aside class="panel sidePanel">
+        <div class="stats">
+          <div class="stat"><div class="statLabel">Score</div><div class="statVal" id="scoreVal">0</div></div>
+          <div class="stat"><div class="statLabel">Best</div><div class="statVal" id="bestVal">0</div></div>
+          <div class="stat"><div class="statLabel">Max</div><div class="statVal" id="maxVal">—</div></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="btnNewGame">New Game</button>
+          <button class="btn" id="btnSaveState">Save State Now</button>
+          <button class="btn danger" id="btnExit">Exit Game</button>
+          <div class="actDivider"></div>
+          <div class="actRow">
+            <button class="btn" id="btnProfile">My Profile</button>
+            <button class="btn" id="btnLeaderboard">Leaderboard</button>
+          </div>
+        </div>
+        <div class="txProgress hide" id="txProgress">
+          <div class="txTrack"><div class="txFill" id="txFill"></div></div>
+          <div class="txLabel" id="txLabel">Sending…</div>
+        </div>
+        <div class="statusLine" id="statusLine"></div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="overlay hide" id="menuOverlay">
+    <div class="modal menuModal">
+      <div class="modalHead">
+        <div class="modalTitle">Menu</div>
+        <button class="btn" id="menuClose">Close</button>
+      </div>
+      <div class="menuSection" id="profileSection">
+        <div class="sectionTitle">Profile</div>
+        <div class="usernameBadge" id="usernameBadge">user_------</div>
+        <div class="affix">
+          <input class="affixInput" id="usernameInput" maxlength="16" placeholder="your name" autocomplete="off" />
+          <span class="affixSuffix" id="usernameSuffix">_------</span>
+        </div>
+        <div class="profileRow">
+          <button class="btn primary" id="btnSaveUsername">Save Username</button>
+          <button class="btn" id="btnRefresh">Refresh</button>
+        </div>
+      </div>
+      <div class="menuSection" id="leaderboardSection">
+        <div class="sectionTitle">Leaderboard</div>
+        <div class="myRank" id="myRank">My Rank: <span class="muted">Unranked</span></div>
+        <div class="lbList" id="lbList"><div class="lbEmpty">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hide" id="confirmOverlay">
+    <div class="modal">
+      <div class="modalTitle" id="confirmTitle">Save score?</div>
+      <div class="modalText" id="confirmText"></div>
+      <div class="modalBtns">
+        <button class="btn" id="confirmNo">Skip</button>
+        <button class="btn primary" id="confirmYes">Save to blockchain</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const APP_PUBKEY = window.localStorage.getItem("merge_master:app_pubkey") || "ut1_merge_master_default_pubkey";
+      const TX_SEND_OPTS = { timeoutMs: 90000, pollIntervalMs: 1500 };
+      const EXPLORER_BASE = window.location.origin + "/explorer-api";
+      const APP_ID = "merge_master";
+      const WASM_ADD_BYTES = new Uint8Array([
+        0x00,0x61,0x73,0x6d,0x01,0x00,0x00,0x00,
+        0x01,0x07,0x01,0x60,0x02,0x7f,0x7f,0x01,0x7f,
+        0x03,0x02,0x01,0x00,
+        0x07,0x07,0x01,0x03,0x61,0x64,0x64,0x00,0x00,
+        0x0a,0x09,0x01,0x07,0x00,0x20,0x00,0x20,0x01,0x6a,0x0b,
+      ]);
+      const wasmMath = (() => {
+        try {
+          const mod = new WebAssembly.Module(WASM_ADD_BYTES);
+          const ins = new WebAssembly.Instance(mod, {});
+          const add = ins.exports && ins.exports.add;
+          if (typeof add === "function") return { add: (a, b) => add(a | 0, b | 0) | 0 };
+        } catch (_) {}
+        return { add: (a, b) => ((a | 0) + (b | 0)) | 0 };
+      })();
+      let wasmSeed = (Date.now() ^ 0x9e3779b9) >>> 0;
+      function wasmRandom() {
+        wasmSeed = (wasmMath.add(((wasmSeed * 1664525) >>> 0), 1013904223) >>> 0);
+        return wasmSeed / 0x100000000;
+      }
+
+      // ── state ──────────────────────────────────────────────
+      const game = { board: new Array(16).fill(0), score: 0, best: 0, maxTile: 2, moves: 0, over: false, won: false };
+      let locked = false, myAddr = "", mySuffix = "_------", chainId = null;
+      let errHold = 0, lbRows = [], nameMap = new Map(), promptShown = false;
+      let runStartedAt = 0;
+
+      // ── element refs ───────────────────────────────────────
+      const el = {
+        menuClose:      document.getElementById("menuClose"),
+        menuOverlay:    document.getElementById("menuOverlay"),
+        walletBadge:    document.getElementById("walletBadge"),
+        board:          document.getElementById("board"),
+        scoreVal:       document.getElementById("scoreVal"),
+        bestVal:        document.getElementById("bestVal"),
+        maxVal:         document.getElementById("maxVal"),
+        statusLine:     document.getElementById("statusLine"),
+        btnNewGame:     document.getElementById("btnNewGame"),
+        btnSaveState:   document.getElementById("btnSaveState"),
+        btnExit:        document.getElementById("btnExit"),
+        btnProfile:     document.getElementById("btnProfile"),
+        btnLeaderboard: document.getElementById("btnLeaderboard"),
+        usernameBadge:  document.getElementById("usernameBadge"),
+        usernameInput:  document.getElementById("usernameInput"),
+        usernameSuffix: document.getElementById("usernameSuffix"),
+        btnSaveUsername:document.getElementById("btnSaveUsername"),
+        btnRefresh:     document.getElementById("btnRefresh"),
+        myRank:         document.getElementById("myRank"),
+        lbList:         document.getElementById("lbList"),
+        txProgress:     document.getElementById("txProgress"),
+        txFill:         document.getElementById("txFill"),
+        txLabel:        document.getElementById("txLabel"),
+        confirmOverlay: document.getElementById("confirmOverlay"),
+        confirmTitle:   document.getElementById("confirmTitle"),
+        confirmText:    document.getElementById("confirmText"),
+        confirmYes:     document.getElementById("confirmYes"),
+        confirmNo:      document.getElementById("confirmNo"),
+        btnUp:          document.getElementById("btnUp"),
+        btnDown:        document.getElementById("btnDown"),
+        btnLeft:        document.getElementById("btnLeft"),
+        btnRight:       document.getElementById("btnRight"),
+      };
+
+      // ── standard helpers ───────────────────────────────────
+      function parseMemo(m) { if (m == null) return null; try { return JSON.parse(String(m)); } catch (_) { return null; } }
+      function extractTimestamp(tx) {
+        const c = [tx.timestamp_ms, tx.created_at, tx.createdAt, tx.timestamp, tx.time];
+        for (const v of c) {
+          if (typeof v === "number" && Number.isFinite(v)) return v < 10_000_000_000 ? v * 1000 : v;
+          if (typeof v === "string" && v.trim()) { const t = Date.parse(v); if (!Number.isNaN(t)) return t; }
+        }
+        return null;
+      }
+      function normalizeTx(tx) {
+        if (!tx || typeof tx !== "object") return null;
+        return { id: tx.tx_id || tx.id || tx.txid || tx.hash || null, from: tx.from_pubkey || tx.from || tx.source || null, to: tx.destination_pubkey || tx.to || tx.destination || null, amount: tx.amount || null, memo: tx.memo != null ? String(tx.memo) : null, ts: extractTimestamp(tx) || Date.now() };
+      }
+      function parseAppTx(raw) {
+        const tx = normalizeTx(raw); if (!tx || !tx.from || tx.to !== APP_PUBKEY) return null;
+        const memo = parseMemo(tx.memo); if (!memo || memo.app !== APP_ID) return null;
+        return { tx, memo };
+      }
+
+      // ── progress bar ───────────────────────────────────────
+      const PB_EXP = 30, PB_WARN = 45, PB_ERR = 90;
+      let _pbRaf = null, _pbT0 = 0;
+      function pbPercent(s) { return s <= PB_EXP ? 95 * (1 - Math.pow(1 - s / PB_EXP, 3)) : 95 + 5 * (1 - Math.exp(-(s - PB_EXP) / 120)); }
+      function _pbTick() {
+        const s = (performance.now() - _pbT0) / 1000;
+        el.txFill.style.width = pbPercent(s) + "%";
+        el.txFill.className = "txFill" + (s >= PB_ERR ? " err" : s >= PB_WARN ? " warn" : "");
+        if (s >= PB_ERR)       { el.txLabel.textContent = "Taking longer than it should; check Discord"; el.txLabel.className = "txLabel err"; }
+        else if (s >= PB_WARN) { el.txLabel.textContent = "Taking longer than expected"; el.txLabel.className = "txLabel warn"; }
+        else                   { el.txLabel.textContent = "Sending…"; el.txLabel.className = "txLabel"; }
+        _pbRaf = requestAnimationFrame(_pbTick);
+      }
+      function pbBegin()  { pbCancel(); el.txProgress.classList.remove("hide"); el.txFill.style.width = "0%"; el.txFill.className = "txFill"; el.txLabel.textContent = "Sending…"; el.txLabel.className = "txLabel"; _pbT0 = performance.now(); _pbRaf = requestAnimationFrame(_pbTick); }
+      function pbDone()   { pbCancel(); el.txFill.className = "txFill ok"; el.txFill.style.width = "100%"; el.txLabel.textContent = "Confirmed!"; el.txLabel.className = "txLabel"; setTimeout(() => el.txProgress.classList.add("hide"), 1200); }
+      function pbCancel() { if (_pbRaf) { cancelAnimationFrame(_pbRaf); _pbRaf = null; } }
+      function pbHide()   { pbCancel(); el.txProgress.classList.add("hide"); }
+
+      // ── lock / send helpers ────────────────────────────────
+      function lock(on) { locked = !!on; document.querySelectorAll("button,input,select").forEach(e => { e.disabled = !!on; }); if (on) pbBegin(); }
+      function setStatus(msg, cls) { el.statusLine.className = "statusLine" + (cls ? " " + cls : ""); el.statusLine.textContent = msg || ""; }
+      function setError(msg)  { setStatus(msg, "err"); errHold = performance.now() + 7000; }
+      function canWrite()     { return performance.now() >= errHold; }
+
+      async function sendTx(payload) {
+        const memo = JSON.stringify(payload);
+        if (memo.length > 1024) throw new Error("Payload too large.");
+        return sendTransaction(APP_PUBKEY, 1, memo, TX_SEND_OPTS);
+      }
+
+      async function sendBlocking(payload, okMsg) {
+        try {
+          lock(true);
+          await sendTx(payload);
+          pbDone(); lock(false);
+          if (okMsg && canWrite()) setStatus(okMsg, "ok");
+          await refreshChain(); return true;
+        } catch (e) {
+          pbHide(); lock(false);
+          setError("Send failed: " + (e && e.message ? e.message : String(e))); return false;
+        }
+      }
+
+      async function attestScoreClaim() {
+        const durationMs = Math.max(1000, Date.now() - (runStartedAt || Date.now()));
+        const resp = await fetch("/__merge/attest-score", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            address: myAddr,
+            score: game.score,
+            maxTile: game.maxTile,
+            moves: game.moves,
+            won: game.won,
+            result: game.won ? "won" : "lost",
+            durationMs,
+          }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data || !data.ok || !data.memo) {
+          throw new Error((data && data.error) || "Attestation failed");
+        }
+        return data.memo;
+      }
+
+      // ── util ───────────────────────────────────────────────
+      function shortAddr(a)  { return a ? a.slice(0, 10) + "…" + a.slice(-6) : ""; }
+      function defaultName(a){ return a ? "user_" + a.slice(-6) : "user_------"; }
+      function currentName() { return nameMap.get(myAddr) || defaultName(myAddr); }
+      function cleanName(v)  { return String(v || "").toLowerCase().replace(/[^a-z0-9_]/g, "").replace(/^_+/, "").slice(0, 16); }
+
+      // ── tile class ─────────────────────────────────────────
+      function tileClass(v) { if (!v) return "tile t0"; if (v <= 2048) return "tile t" + v; return "tile tbig"; }
+
+      // ── render ─────────────────────────────────────────────
+      function renderBoard() {
+        el.board.innerHTML = "";
+        for (let i = 0; i < 16; i++) {
+          const d = document.createElement("div");
+          d.className = tileClass(game.board[i]);
+          d.textContent = game.board[i] ? String(game.board[i]) : "";
+          el.board.appendChild(d);
+        }
+        el.scoreVal.textContent = String(game.score);
+        el.bestVal.textContent  = String(game.best);
+        el.maxVal.textContent   = game.maxTile >= 2 ? String(game.maxTile) : "—";
+      }
+
+      function renderProfile() {
+        el.usernameBadge.textContent  = currentName();
+        el.usernameSuffix.textContent = mySuffix;
+      }
+
+      function renderMyRank() {
+        const idx = lbRows.findIndex(r => r.address === myAddr);
+        if (idx < 0) {
+          el.myRank.textContent = "My Rank: Unranked";
+          return;
+        }
+        const row = lbRows[idx];
+        el.myRank.textContent = "My Rank: #" + (idx + 1) + " · Score " + row.score;
+      }
+
+      function renderLeaderboard() {
+        el.lbList.innerHTML = "";
+        renderMyRank();
+        if (!lbRows.length) {
+          const d = document.createElement("div"); d.className = "lbEmpty"; d.textContent = "No scores yet. Be the first champion.";
+          el.lbList.appendChild(d); return;
+        }
+        lbRows.slice(0, 100).forEach((row, i) => {
+          const item = document.createElement("div"); item.className = "lbRow";
+          const rank = document.createElement("div"); rank.className = "lbRank"; rank.textContent = "#" + (i + 1);
+          const info = document.createElement("div");
+          const nm = document.createElement("div"); nm.className = "lbName"; nm.textContent = row.username || defaultName(row.address);
+          const ad = document.createElement("div"); ad.className = "lbAddr"; ad.textContent = shortAddr(row.address);
+          info.appendChild(nm); info.appendChild(ad);
+          const sc = document.createElement("div"); sc.className = "lbScore"; sc.textContent = String(row.score);
+          item.appendChild(rank); item.appendChild(info); item.appendChild(sc);
+          el.lbList.appendChild(item);
+        });
+      }
+
+      // ── 2048 game logic ────────────────────────────────────
+      function addTile() {
+        const empty = []; for (let i = 0; i < 16; i++) if (!game.board[i]) empty.push(i);
+        if (!empty.length) return;
+        game.board[empty[Math.floor(wasmRandom() * empty.length)]] = wasmRandom() < 0.9 ? 2 : 4;
+      }
+
+      function slideLeft(row) {
+        const f = row.filter(x => x); let gained = 0;
+        for (let i = 0; i < f.length - 1; i++) { if (f[i] && f[i] === f[i + 1]) { f[i] *= 2; gained += f[i]; f[i + 1] = 0; } }
+        const r = f.filter(x => x); while (r.length < 4) r.push(0);
+        return { row: r, gained };
+      }
+
+      function transpose(b) { const o = new Array(16).fill(0); for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) o[c * 4 + r] = b[r * 4 + c]; return o; }
+      function revRows(b)    { const o = b.slice(); for (let r = 0; r < 4; r++) { const i = r * 4; [o[i], o[i+3]] = [o[i+3], o[i]]; [o[i+1], o[i+2]] = [o[i+2], o[i+1]]; } return o; }
+      function equal(a, b)   { for (let i = 0; i < 16; i++) if (a[i] !== b[i]) return false; return true; }
+
+      function applyLeft(b) {
+        const n = b.slice(); let gained = 0;
+        for (let r = 0; r < 4; r++) {
+          const i = r * 4; const res = slideLeft([n[i], n[i+1], n[i+2], n[i+3]]);
+          gained += res.gained; [n[i], n[i+1], n[i+2], n[i+3]] = res.row;
+        }
+        return { board: n, gained };
+      }
+
+      function moveDir(b, dir) {
+        if (dir === "left")  return applyLeft(b);
+        if (dir === "right") { const r = applyLeft(revRows(b));             return { board: revRows(r.board),                    gained: r.gained }; }
+        if (dir === "up")    { const r = applyLeft(transpose(b));           return { board: transpose(r.board),                  gained: r.gained }; }
+        /* down */             const r = applyLeft(revRows(transpose(b)));  return { board: transpose(revRows(r.board)),          gained: r.gained };
+      }
+
+      function hasMoves() {
+        if (game.board.includes(0)) return true;
+        for (const d of ["left","right","up","down"]) { if (!equal(game.board, moveDir(game.board, d).board)) return true; }
+        return false;
+      }
+
+      function move(dir) {
+        if (game.over || locked) return;
+        const before = game.board.slice();
+        const { board: after, gained } = moveDir(game.board, dir);
+        if (equal(before, after)) return;
+        game.board = after; game.score += gained; game.moves++;
+        addTile();
+        game.maxTile = Math.max(...game.board, game.maxTile);
+        if (game.maxTile >= 2048) game.won = true;
+        game.best = Math.max(game.best, game.score);
+        if (!hasMoves()) {
+          game.over = true; renderBoard();
+          if (!promptShown && game.score > 0) { promptShown = true; showSavePrompt("Game over"); }
+        } else { renderBoard(); }
+      }
+
+      function newGame() {
+        Object.assign(game, { board: new Array(16).fill(0), score: 0, maxTile: 2, moves: 0, over: false, won: false });
+        promptShown = false; addTile(); addTile();
+        runStartedAt = Date.now();
+        game.maxTile = Math.max(2, ...game.board.filter(x => x));
+        renderBoard(); if (canWrite()) setStatus("New game started.", "ok");
+      }
+
+      // ── chain interaction ──────────────────────────────────
+      function buildStatePayload() {
+        const status = game.over ? (game.won ? "won" : "lost") : (game.won ? "won_in_progress" : "playing");
+        return { app: APP_ID, type: "save_state", state: { board: game.board, score: game.score, maxTile: game.maxTile, moves: game.moves, over: game.over, won: game.won, status, ts: Date.now() } };
+      }
+
+      function buildLeaderboard(txs) {
+        const latestName = new Map(), bestScore = new Map();
+        txs.sort((a, b) => a.tx.ts - b.tx.ts);
+        for (const { tx, memo } of txs) {
+          if (memo.type === "set_username" && typeof memo.username === "string" && memo.username.trim()) {
+            const prev = latestName.get(tx.from);
+            if (!prev || tx.ts >= prev.ts) latestName.set(tx.from, { username: memo.username.trim(), ts: tx.ts });
+          }
+          if (memo.type === "save_score") {
+            const s = parseInt(memo.score, 10); if (!Number.isFinite(s) || s < 0) continue;
+            const prev = bestScore.get(tx.from);
+            if (!prev || s > prev.score || (s === prev.score && tx.ts < prev.ts))
+              bestScore.set(tx.from, { address: tx.from, score: s, maxTile: parseInt(memo.maxTile, 10) || 0, ts: tx.ts });
+          }
+        }
+        nameMap = new Map(Array.from(latestName.entries()).map(([a, v]) => [a, v.username]));
+        lbRows  = Array.from(bestScore.values()).map(r => ({ ...r, username: nameMap.get(r.address) || defaultName(r.address) }));
+        lbRows.sort((a, b) => (b.score - a.score) || (a.ts - b.ts));
+      }
+
+      async function refreshChain() {
+        try {
+          const params = new URLSearchParams();
+          if (myAddr) params.set("address", myAddr);
+          const resp = await fetch(`/__merge/leaderboard?${params}`);
+          if (!resp.ok) throw new Error("Leaderboard " + resp.status);
+          const data = await resp.json();
+          lbRows = (data && data.rows) || [];
+          nameMap = new Map(Object.entries((data && data.usernames) || {}));
+          renderLeaderboard(); renderProfile();
+          if (canWrite()) setStatus("Synced.", "ok");
+        } catch (e) { setError("Refresh failed: " + (e && e.message ? e.message : String(e))); }
+      }
+
+      function showSavePrompt(reason) {
+        if (game.score <= 0) return Promise.resolve(false);
+        return new Promise(resolve => {
+          el.confirmTitle.textContent = "Save score?";
+          el.confirmText.textContent  = reason + ". Save your score to the blockchain?";
+          el.confirmOverlay.classList.remove("hide");
+          const cleanup = () => { el.confirmOverlay.classList.add("hide"); el.confirmYes.onclick = null; el.confirmNo.onclick = null; };
+          el.confirmYes.onclick = async () => {
+            cleanup();
+            try {
+              const memo = await attestScoreClaim();
+              resolve(await sendBlocking(memo, "Score saved!"));
+            } catch (e) {
+              setError("Score verification failed: " + (e && e.message ? e.message : String(e)));
+              resolve(false);
+            }
+          };
+          el.confirmNo.onclick = () => { cleanup(); resolve(false); };
+        });
+      }
+
+      function openMenu(section) {
+        el.menuOverlay.classList.remove("hide");
+        if (section) setTimeout(() => document.getElementById(section).scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      }
+      function closeMenu() { el.menuOverlay.classList.add("hide"); }
+
+      // ── input ──────────────────────────────────────────────
+      function bindInput() {
+        let tx0 = 0, ty0 = 0, tactive = false;
+        document.addEventListener("keydown", e => {
+          if (e.key === "ArrowLeft")  { e.preventDefault(); move("left"); }
+          if (e.key === "ArrowRight") { e.preventDefault(); move("right"); }
+          if (e.key === "ArrowUp")    { e.preventDefault(); move("up"); }
+          if (e.key === "ArrowDown")  { e.preventDefault(); move("down"); }
+        });
+        document.addEventListener("touchstart", e => {
+          if (!e.touches || !e.touches.length || e.target.closest("button,input,select,.overlay")) return;
+          tx0 = e.touches[0].clientX; ty0 = e.touches[0].clientY; tactive = true;
+        }, { passive: true });
+        document.addEventListener("touchend", e => {
+          if (!tactive || !e.changedTouches || !e.changedTouches.length) return;
+          const dx = e.changedTouches[0].clientX - tx0, dy = e.changedTouches[0].clientY - ty0; tactive = false;
+          if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return;
+          move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+        }, { passive: true });
+        document.addEventListener("touchcancel", () => { tactive = false; }, { passive: true });
+        el.btnLeft.addEventListener("click",  () => move("left"));
+        el.btnRight.addEventListener("click", () => move("right"));
+        el.btnUp.addEventListener("click",    () => move("up"));
+        el.btnDown.addEventListener("click",  () => move("down"));
+      }
+
+      // ── actions ────────────────────────────────────────────
+      function bindActions() {
+        el.menuClose.addEventListener("click", closeMenu);
+        el.menuOverlay.addEventListener("click", e => { if (e.target === el.menuOverlay) closeMenu(); });
+
+        el.btnNewGame.addEventListener("click", async () => {
+          if (game.score > 0 && !game.over) await showSavePrompt("Starting a new game");
+          newGame();
+        });
+
+        el.btnExit.addEventListener("click", async () => {
+          if (game.score > 0 && !game.over) await showSavePrompt("Exiting game");
+          newGame();
+        });
+
+        el.btnProfile.addEventListener("click",     () => openMenu("profileSection"));
+        el.btnLeaderboard.addEventListener("click", () => openMenu("leaderboardSection"));
+
+        el.btnSaveState.addEventListener("click", () => sendBlocking(buildStatePayload(), "Game state saved."));
+
+        el.btnSaveUsername.addEventListener("click", async () => {
+          const base = cleanName(el.usernameInput.value);
+          if (!base) { setError("Username cannot be empty."); return; }
+          const full = base + mySuffix;
+          const ok = await sendBlocking({ app: APP_ID, type: "set_username", username: full }, "Username updated.");
+          if (ok) { el.usernameInput.value = base; nameMap.set(myAddr, full); renderProfile(); }
+        });
+
+        el.btnRefresh.addEventListener("click", refreshChain);
+      }
+
+      // ── bootstrap ──────────────────────────────────────────
+      async function bootstrap() {
+        try {
+          const mockOn = window.usernode && typeof window.usernode.isMockEnabled === "function"
+            ? await window.usernode.isMockEnabled() : false;
+          if (!mockOn) {
+            try {
+              const data = await (await fetch(`${EXPLORER_BASE}/active_chain`)).json();
+              chainId = data.chain_id;
+              window.usernode = window.usernode || {};
+              window.usernode.transactionsBaseUrl = `${EXPLORER_BASE}/${chainId}`;
+            } catch (_) {}
+          }
+          myAddr = await getNodeAddress();
+          mySuffix = "_" + myAddr.slice(-6);
+          el.walletBadge.textContent    = shortAddr(myAddr);
+          el.usernameSuffix.textContent = mySuffix;
+          el.usernameInput.value        = cleanName(defaultName(myAddr).replace(mySuffix, ""));
+          bindInput(); bindActions(); newGame();
+          await refreshChain();
+          setInterval(refreshChain, 8000);
+        } catch (e) {
+          setError("Init failed: " + (e && e.message ? e.message : String(e)));
+        }
+      }
+
+      bootstrap();
+
+    })();
+  </script>
+</body>
+</html>

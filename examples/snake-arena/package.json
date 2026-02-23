@@ -1,0 +1,14 @@
+{
+  "name": "snake-arena",
+  "version": "1.0.0",
+  "description": "Usernode Snake Arena",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --local-dev"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

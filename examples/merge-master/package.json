@@ -1,0 +1,13 @@
+{
+  "name": "merge-master-2048",
+  "version": "1.0.0",
+  "description": "Merge Master 2048 Usernode dapp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --local-dev"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
