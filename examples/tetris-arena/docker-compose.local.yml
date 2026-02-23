@@ -1,7 +1,0 @@
-version: "3.8"
-
-services:
-  tetris-arena:
-    command: node server.js --local-dev
-    ports:
-      - "3333:3333"
