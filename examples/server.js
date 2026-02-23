@@ -42,7 +42,7 @@ const LASTWIN_HTML = path.join(__dirname, "last-one-wins", "index.html");
 // ── Game config (Last One Wins) ──────────────────────────────────────────────
 const LASTWIN_APP_PUBKEY = process.env.APP_PUBKEY || "ut1_lastwin_default_pubkey";
 const LASTWIN_APP_SECRET_KEY = process.env.APP_SECRET_KEY || "";
-const LASTWIN_NODE_RPC_URL = process.env.NODE_RPC_URL || "http://localhost:3000";
+const LASTWIN_NODE_RPC_URL = process.env.NODE_RPC_URL || "https://alpha2.usernodelabs.org";
 const LASTWIN_TIMER_MS = parseInt(process.env.TIMER_DURATION_MS, 10) || 86400000;
 
 // ── Mock API ─────────────────────────────────────────────────────────────────

@@ -23,6 +23,14 @@ jobs:
             echo "==> Git status:"
             git status --short
 
+            echo "==> Writing .env from secrets..."
+            cat > .env <<'ENVEOF'
+            APP_PUBKEY=${{ secrets.APP_PUBKEY }}
+            APP_SECRET_KEY=${{ secrets.APP_SECRET_KEY }}
+            ENVEOF
+            sed -i 's/^[[:space:]]*//' .env
+            echo "==> .env written ($(wc -l < .env) lines)"
+
             echo "==> Pulling latest code..."
             git pull --recurse-submodules
             git submodule update --init --recursive
